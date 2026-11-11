@@ -1,0 +1,27 @@
+# 编译产物
+bin/
+obj/
+out/
+out_*/
+FodyWeavers.xsd
+dist/
+*.pdb
+*.exe
+*.dll
+*.zip
+.vs/
+*.user
+
+# 运行时数据（设置、阅读进度、日志、Steam 登录状态都在 exe 旁边生成）
+snf.*.json
+snf.*.json.*
+snf.log
+snf.log.old
+webview2/
+
+# 签名与密钥
+*.pfx
+*.p12
+*.pem
+*.key
+.env*

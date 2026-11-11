@@ -1,0 +1,383 @@
+<ui:FluentWindow x:Class="SteamNewsFeed.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:local="clr-namespace:SteamNewsFeed"
+                 Title="Steam 新闻聚合"
+                 Width="1180" Height="820" MinWidth="820" MinHeight="560"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Acrylic"
+                 WindowCornerPreference="Round"
+                 UseLayoutRounding="True"
+                 TextOptions.TextFormattingMode="Display"
+                 TextOptions.TextRenderingMode="ClearType"
+                 RenderOptions.ClearTypeHint="Enabled"
+                 Icon="pack://application:,,,/SteamNewsFeed;component/SteamNewsFeed/icon.png">
+    <ui:FluentWindow.Resources>
+        <Style x:Key="NavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Appearance" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style x:Key="Section" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="2,18,0,8"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        </Style>
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="ui:CardControl" BasedOn="{StaticResource {x:Type ui:CardControl}}">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 整个窗口一层灰色遮罩（亚克力），导航和页面看起来一致 -->
+        <Rectangle x:Name="Tint" Grid.RowSpan="2" IsHitTestVisible="False" Opacity="0"/>
+
+        <ui:TitleBar Grid.Row="0" Title="Steam 新闻聚合">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/SteamNewsFeed;component/SteamNewsFeed/icon.png"/>
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 导航 -->
+            <DockPanel Grid.Column="0" Margin="10,4,6,12">
+                <StackPanel DockPanel.Dock="Bottom" Margin="6,8,4,0">
+                    <Border x:Name="AppUpdateBox" Visibility="Collapsed" CornerRadius="6" Padding="10,8" Margin="0,0,0,10"
+                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock x:Name="AppUpdateText" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            <ui:Button x:Name="AppUpdateButton" Content="更新" Appearance="Primary" Margin="0,8,0,0" HorizontalAlignment="Stretch" Click="AppUpdate_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="SideUser" Style="{StaticResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="SideRefresh" Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0"/>
+                </StackPanel>
+                <StackPanel x:Name="Nav">
+                    <ui:Button Style="{StaticResource NavButton}" Tag="0" Click="Nav_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="News24" Margin="0,0,12,0"/><TextBlock Text="时间线"/>
+                            <Border x:Name="NavBadge" Visibility="Collapsed" Margin="8,0,0,0" Padding="6,0" CornerRadius="9" MinWidth="18" Height="18" Background="#D98F40" VerticalAlignment="Center">
+                                <local:GlyphText x:Name="NavCount" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                            </Border>
+                        </StackPanel>
+                    </ui:Button>
+                    <ui:Button Style="{StaticResource NavButton}" Tag="1" Click="Nav_Click">
+                        <StackPanel Orientation="Horizontal"><ui:SymbolIcon Symbol="Settings24" Margin="0,0,12,0"/><TextBlock Text="设置"/></StackPanel>
+                    </ui:Button>
+                </StackPanel>
+            </DockPanel>
+
+            <Border x:Name="PageLayer" Grid.Column="1" CornerRadius="8,0,0,0" Background="{DynamicResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1,1,0,0">
+                <Grid>
+                    <!-- 0 时间线（WebView2） -->
+                    <Border x:Name="PageFeed"/>
+                    <!-- 1 设置 -->
+                    <ScrollViewer x:Name="PageSettings" Padding="24,6,24,24" Visibility="Collapsed">
+                        <StackPanel MaxWidth="980">
+                            <TextBlock Text="设置" FontSize="26" FontWeight="SemiBold" Margin="0,10,0,0"/>
+
+                            <TextBlock Text="账号" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon Person24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="Steam 登录"/>
+                                        <TextBlock x:Name="LoginState" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:Button x:Name="LoginButton" Content="登录" Appearance="Primary" Margin="0,0,8,0" Click="Login_Click"/>
+                                    <ui:Button x:Name="LogoutButton" Content="退出登录" Click="Logout_Click"/>
+                                </StackPanel>
+                            </ui:CardControl>
+
+                            <TextBlock Text="新闻流" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon Star24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="显示 Steam 精选"/>
+                                        <TextBlock Text="Steam 推的热门游戏（不在你的库、愿望单、关注里）的新闻。Steam 新闻中心默认也不显示" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="ShowFeatured" Click="Option_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon EyeOff24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="屏蔽的游戏和账号"/>
+                                        <TextBlock x:Name="BlockedHint" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                            </ui:CardControl>
+                            <StackPanel x:Name="BlockedList"/>
+
+                            <TextBlock Text="新发售推送" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon PuzzlePiece24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="DLC 也推送"/>
+                                        <TextBlock Text="关注的发行商出的 DLC（包括原声带）也当成新发售推送" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="IncludeDlc" Click="Option_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Building24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="只推送发行商 / 开发商自己的游戏"/>
+                                        <TextBlock Text="关掉后，关注的鉴赏家新推荐的别家游戏也会推送" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="OnlyOwnGames" Click="Option_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon History24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="往回找多少天内发售的游戏"/>
+                                        <TextBlock Text="第一次运行、刚关注的发行商，会把这段时间里发售的游戏补上" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ComboBox x:Name="LookbackBox" MinWidth="140" SelectionChanged="Option_Changed">
+                                    <ComboBoxItem Content="7 天" Tag="7"/>
+                                    <ComboBoxItem Content="14 天" Tag="14"/>
+                                    <ComboBoxItem Content="30 天" Tag="30"/>
+                                    <ComboBoxItem Content="60 天" Tag="60"/>
+                                    <ComboBoxItem Content="90 天" Tag="90"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Money24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="价格后面显示人民币"/>
+                                        <TextBlock x:Name="RateText" Text="按当天汇率换算，半天更新一次" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="ShowCny" Click="Option_Changed"/>
+                            </ui:CardControl>
+
+                            <TextBlock Text="翻译（大模型）" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon Translate24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="接口格式"/>
+                                        <TextBlock Text="OpenAI 兼容：DeepSeek、通义千问、Kimi、智谱、硅基流动、OpenRouter、OpenAI 等都用这个" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ComboBox x:Name="AiFormatBox" MinWidth="200" SelectionChanged="AiFormat_Changed">
+                                    <ComboBoxItem Content="OpenAI 兼容" Tag="openai"/>
+                                    <ComboBoxItem Content="Anthropic Claude" Tag="anthropic"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Globe24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="接口地址"/>
+                                        <TextBlock x:Name="AiBaseHint" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:TextBox x:Name="AiBaseBox" Width="320" TextChanged="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Key24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="API 密钥"/>
+                                        <TextBlock Text="加密后存在程序文件夹的设置里，只有当前 Windows 用户能解开" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <PasswordBox x:Name="AiKeyBox" Width="320" PasswordChanged="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon BrainCircuit24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="模型"/>
+                                        <TextBlock x:Name="AiModelHint" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:TextBox x:Name="AiModelBox" Width="320" TextChanged="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Lightbulb24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="思考"/>
+                                        <TextBlock x:Name="AiThinkHint" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox x:Name="AiThinkBox" MinWidth="180" SelectionChanged="Ai_Changed">
+                                        <ComboBoxItem Content="不思考" Tag="off"/>
+                                        <ComboBoxItem Content="思考" Tag="on"/>
+                                        <ComboBoxItem Content="超过一定字数才思考" Tag="auto"/>
+                                    </ComboBox>
+                                    <ui:TextBox x:Name="AiThinkWordsBox" Width="90" Margin="8,0,0,0" TextChanged="Ai_Changed" ToolTip="超过多少个词开启思考（中文一个字算一个词）"/>
+                                    <TextBlock x:Name="AiThinkWordsUnit" Text="词以上" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon BrainCircuit24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="思考时换用的模型（可选）"/>
+                                        <TextBlock Text="有的服务商靠换模型来开思考，比如 DeepSeek 的 deepseek-reasoner、Kimi 的 thinking 模型。留空就用上面的模型" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:TextBox x:Name="AiThinkModelBox" Width="320" TextChanged="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon TextGrammarArrowRight24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="流式输出"/>
+                                        <TextBlock Text="边翻译边显示；关掉就等整篇翻完一次显示" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="AiStreamBox" Click="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon LocalLanguage24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="自动翻译"/>
+                                        <TextBlock Text="不是目标语言的新闻和评论，滚到时自动翻译（会消耗 API 额度）。关掉时每条右上角的「译」按钮手动翻译" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="AutoTranslateBox" Click="Ai_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Translate24}" Header="翻译成">
+                                <ComboBox x:Name="TranslateToBox" MinWidth="180" SelectionChanged="Ai_Changed">
+                                    <ComboBoxItem Content="简体中文" Tag="简体中文"/>
+                                    <ComboBoxItem Content="繁體中文" Tag="繁體中文"/>
+                                    <ComboBoxItem Content="English" Tag="English"/>
+                                    <ComboBoxItem Content="日本語" Tag="日本語"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon PlugConnected24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="测试"/>
+                                        <TextBlock x:Name="AiTestText" Text="用上面的设置翻译一句话，看能不能用" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:Button x:Name="AiTestButton" Content="测试" Click="AiTest_Click"/>
+                            </ui:CardControl>
+
+                            <TextBlock Text="刷新与通知" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon ArrowSync24}" Header="自动刷新">
+                                <ComboBox x:Name="RefreshBox" MinWidth="140" SelectionChanged="Option_Changed">
+                                    <ComboBoxItem Content="每 15 分钟" Tag="15"/>
+                                    <ComboBoxItem Content="每 30 分钟" Tag="30"/>
+                                    <ComboBoxItem Content="每 1 小时" Tag="60"/>
+                                    <ComboBoxItem Content="每 3 小时" Tag="180"/>
+                                    <ComboBoxItem Content="不自动刷新" Tag="0"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Alert24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="发现新发售的游戏时弹通知"/>
+                                        <TextBlock Text="窗口缩在托盘时，右下角弹出通知，点一下打开时间线" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="NotifyBox" Click="Option_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon ArrowMinimize24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="点关闭时最小化到托盘"/>
+                                        <TextBlock Style="{StaticResource Muted}" Text="缩到任务栏右下角的通知区域，后台继续刷新；单击托盘图标打开，右键可以退出"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="CloseToTrayBox" Click="Option_Changed"/>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Power24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="开机自动启动"/>
+                                        <TextBlock Style="{StaticResource Muted}" Text="开机后直接缩在托盘里，后台刷新"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ui:ToggleSwitch x:Name="AutoStartBox" Click="AutoStart_Click"/>
+                            </ui:CardControl>
+
+                            <TextBlock Text="外观" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon DarkTheme24}" Header="主题">
+                                <ComboBox x:Name="ThemeBox" MinWidth="180" SelectionChanged="Appearance_Changed">
+                                    <ComboBoxItem Content="跟随系统"/>
+                                    <ComboBoxItem Content="日间（浅色）"/>
+                                    <ComboBoxItem Content="夜间（深色）"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl Icon="{ui:SymbolIcon Blur24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="窗口背景"/>
+                                        <TextBlock Text="亚克力：半透明，透出后面模糊的窗口；云母：取桌面壁纸的颜色" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <ComboBox x:Name="BackdropBox" MinWidth="180" SelectionChanged="Appearance_Changed">
+                                    <ComboBoxItem Content="亚克力（半透明）"/>
+                                    <ComboBoxItem Content="云母"/>
+                                    <ComboBoxItem Content="无"/>
+                                </ComboBox>
+                            </ui:CardControl>
+                            <ui:CardControl x:Name="TintCard" Icon="{ui:SymbolIcon Color24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock Text="亚克力遮罩不透明度"/>
+                                        <TextBlock Text="深色主题用深灰、浅色主题用浅灰盖在半透明背景上；越大越不透明" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <Slider x:Name="TintSlider" Width="200" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="Tint_Changed"/>
+                                    <TextBlock x:Name="TintText" Width="44" TextAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </ui:CardControl>
+
+                            <TextBlock Text="关于" Style="{StaticResource Section}"/>
+                            <ui:CardControl Icon="{ui:SymbolIcon ArrowDownload24}">
+                                <ui:CardControl.Header>
+                                    <StackPanel>
+                                        <TextBlock x:Name="VersionText"/>
+                                        <TextBlock x:Name="UpdateState" Style="{StaticResource Muted}"/>
+                                    </StackPanel>
+                                </ui:CardControl.Header>
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:ToggleSwitch x:Name="CheckAppUpdate" Content="自动检查" Margin="0,0,16,0" Click="Option_Changed"/>
+                                    <ui:Button Content="检查更新" Click="CheckUpdate_Click"/>
+                                </StackPanel>
+                            </ui:CardControl>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <ui:Button Content="查看日志" Icon="{ui:SymbolIcon DocumentText24}" Margin="0,0,8,0" Click="OpenLog_Click"/>
+                                <ui:Button Content="打开程序文件夹" Icon="{ui:SymbolIcon Folder24}" Margin="0,0,8,0" Click="OpenFolder_Click"/>
+                                <ui:Button Content="项目主页" Icon="{ui:SymbolIcon Open24}" Click="OpenRepo_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

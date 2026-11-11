@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
+  <!-- WebView2Loader.dll 是原生 dll，由 SingleFile.cs 自己释放 -->
+  <Costura IncludeDebugSymbols="false" ExcludeAssemblies="WebView2Loader" ExcludeRuntimeAssemblies="WebView2Loader" />
+</Weavers>

@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>SteamNewsFeed</AssemblyName>
+    <RootNamespace>SteamNewsFeed</RootNamespace>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>True</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <TargetFramework>net48</TargetFramework>
+    <!-- WebView2 needs the loader DLL that matches the process; the app ships as win-x64 -->
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <StartupObject>SteamNewsFeed.Program</StartupObject>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <!-- 打包成一个 exe：.NET 依赖由 Costura 嵌进 exe，WebView2Loader.dll 作为资源嵌进去、运行时释放（见 SingleFile.cs），
+         所以不往输出目录复制 loader，也不生成 exe.config（里面的设置在 Program.cs 里用代码设置） -->
+    <WebView2NeverCopyLoaderDllToOutputDirectory>true</WebView2NeverCopyLoaderDllToOutputDirectory>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="SteamNewsFeed\icon.png" />
+    <EmbeddedResource Include="app.ico" LogicalName="SteamNewsFeed.app.ico" />
+    <EmbeddedResource Include="SteamNewsFeed\Web\feed.html" LogicalName="SteamNewsFeed.feed.html" />
+    <!-- WebView2 的原生 loader：编译前复制成 .bin 再嵌进 exe（.dll 资源会被 Costura 当成依赖收走），启动时由 SingleFile.cs 释放 -->
+    <EmbeddedResource Include="obj\WebView2Loader.bin" LogicalName="SteamNewsFeed.WebView2Loader.dll" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Security" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Anthropic" Version="13.8.0" />
+    <PackageReference Include="Fody" Version="6.9.2" PrivateAssets="all" />
+    <PackageReference Include="Costura.Fody" Version="6.0.0" PrivateAssets="all" />
+  </ItemGroup>
+  <Target Name="CopyWebView2Loader" BeforeTargets="PrepareForBuild">
+    <Copy SourceFiles="$(NuGetPackageRoot)microsoft.web.webview2\1.0.2903.40\runtimes\win-x64\native\WebView2Loader.dll" DestinationFiles="obj\WebView2Loader.bin" SkipUnchangedFiles="true" />
+  </Target>
+  <!-- 输出目录只留 exe -->
+  <Target Name="SingleExeOnly" AfterTargets="Build">
+    <Delete Files="$(OutDir)WebView2Loader.dll;$(OutDir)$(TargetFileName).config" />
+  </Target>
+</Project>

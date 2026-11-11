@@ -1,0 +1,128 @@
+name: Release
+
+# 推送到 main 时：取 CHANGELOG.md 最上面的版本（如 “## [1.0.2] - 2026-10-24”），
+#   如果还没有对应的 v版本号 标签，就自动发布并创建标签；否则只编译。标成“未发布”的版本不会发布。
+# 推送 v* 标签时：按标签的版本号发布。
+# 手动运行时：填版本号就发布，留空只编译。
+# 开 PR 到 main 时：只编译，确认能编出单个 exe（不发布）；编译通过后再合并。
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "填版本号（如 1.0.1）就发布到 Releases 并自动创建 v版本号 标签；留空只编译"
+        type: string
+        default: ""
+
+# 同一分支的运行排队执行，后一次能看到前一次刚建的标签，避免同一版本号发布两次
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $manual = "${{ inputs.version }}".Trim()
+          if ($manual) {
+            if ($manual -notmatch '^v?\d+\.\d+\.\d+$') { Write-Error "版本号 '$manual' 格式不对，应为 1.0.1 这样"; exit 1 }
+            $tag = "v" + $manual.TrimStart('v')
+            "PUBLISH=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -eq "refs/heads/main") {
+            $tag = ""
+            $m = Select-String -Path CHANGELOG.md -Encoding utf8 -Pattern '^## \[(\d+\.\d+\.\d+)\] - (.+)$' | Select-Object -First 1
+            if ($m -and $m.Matches[0].Groups[2].Value -notmatch '未发布') {
+              $tag = "v" + $m.Matches[0].Groups[1].Value
+              $refs = git ls-remote --tags origin "refs/tags/$tag"
+              if ($LASTEXITCODE) { Write-Error "查询标签失败"; exit 1 }
+              if ($refs) { "$tag 已经发布过，这次只编译" } else { "$tag 还没发布，这次自动发布"; "PUBLISH=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+            } else { "CHANGELOG.md 最上面的版本还没标日期，这次只编译" }
+          }
+          if ($tag -match '^v(\d+)\.(\d+)\.(\d+)$') {
+            $ver = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+          } else {
+            $ver = "0.0.0"
+          }
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $file = "windows/Properties/AssemblyInfo.cs"
+          $text = Get-Content $file -Raw -Encoding utf8
+          $text = $text -replace 'AssemblyVersion\("[^"]*"\)', "AssemblyVersion(`"$ver.0`")"
+          $text += "`n[assembly: AssemblyFileVersion(`"$ver.0`")]`n[assembly: AssemblyInformationalVersion(`"$ver`")]`n"
+          Set-Content $file $text -Encoding utf8
+
+      - name: Build
+        run: dotnet build windows/SteamNewsFeed.csproj -c Release -o out
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          # 发布一个单独的 exe（依赖由 Costura 打包在里面）；输出目录里有别的文件说明打包出了问题
+          $extra = Get-ChildItem out -Recurse -File | Where-Object { $_.Name -ne "SteamNewsFeed.exe" }
+          if ($extra) { Write-Error ("输出目录里除了 exe 还有：" + ($extra.Name -join ", ")); exit 1 }
+          $asset = "dist/SteamNewsFeed.exe"
+          Copy-Item out/SteamNewsFeed.exe $asset
+          # update.json：程序从 releases/latest/download/update.json 读新版本，格式和 GitHub 接口的发布信息一样，
+          # 这样不占接口每个 IP 每小时 60 次的额度。说明取 CHANGELOG.md 里本版本那一节。
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].StartsWith("## [$env:VERSION]")) { $start = $i; break } }
+          $notes = "见 CHANGELOG.md"
+          if ($start -ge 0) {
+            $body = @()
+            for ($i = $start + 1; $i -lt $lines.Count -and $lines[$i] -notmatch '^## '; $i++) { $body += $lines[$i] }
+            $notes = ($body -join "`n").Trim()
+          }
+          $tag = "v$env:VERSION"
+          $name = Split-Path $asset -Leaf
+          $base = "https://github.com/${{ github.repository }}/releases"
+          [ordered]@{
+            tag_name = $tag
+            html_url = "$base/tag/$tag"
+            body = $notes
+            assets = @([ordered]@{
+              name = $name
+              size = (Get-Item $asset).Length
+              digest = "sha256:" + (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+              browser_download_url = "$base/download/$tag/$name"
+            })
+          } | ConvertTo-Json -Depth 4 | Set-Content dist/update.json -Encoding utf8NoBOM
+          Get-Content dist/update.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SteamNewsFeed-win-x64
+          path: |
+            dist/SteamNewsFeed.exe
+            dist/update.json
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v') || env.PUBLISH == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/SteamNewsFeed.exe
+            dist/update.json
+          generate_release_notes: true

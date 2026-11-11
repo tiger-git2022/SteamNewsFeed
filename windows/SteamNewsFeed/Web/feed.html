@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>时间线</title>
+<style>
+/* 颜色跟 WPF-UI（Fluent）一致；页面本身透明，透出窗口的亚克力背景（和 N网 Mod 更新的页面同一套） */
+:root {
+  --accent: #60cdff;
+  --card: rgba(255,255,255,.051); --cardhover: rgba(255,255,255,.07); --card2: rgba(255,255,255,.03); --hover: rgba(255,255,255,.084); --press: rgba(255,255,255,.033);
+  --line: rgba(255,255,255,.083); --ctl: rgba(255,255,255,.061); --ctlhover: rgba(255,255,255,.084); --ctlline: rgba(255,255,255,.093);
+  --fg: #ffffff; --fg2: rgba(255,255,255,.786); --fg3: rgba(255,255,255,.545); --chip: rgba(255,255,255,.07);
+  --solid: #2c2c2c; --shadow: rgba(0,0,0,.4); --thumb: rgba(0,0,0,.3);
+  --new: #f0a050; --onnew: rgba(0,0,0,.9); --ok: #6ccb5f; --danger: #ff99a4;
+  --disc: #4c6b22; --discfg: #beee11; --pricebg: rgba(0,0,0,.25);
+}
+:root.light {
+  --card: rgba(255,255,255,.2); --cardhover: rgba(255,255,255,.3); --card2: rgba(255,255,255,.14); --hover: rgba(0,0,0,.045); --press: rgba(0,0,0,.03);
+  --line: rgba(0,0,0,.075); --ctl: rgba(255,255,255,.3); --ctlhover: rgba(255,255,255,.42); --ctlline: rgba(0,0,0,.1);
+  --fg: rgba(0,0,0,.9); --fg2: rgba(0,0,0,.64); --fg3: rgba(0,0,0,.5); --chip: rgba(0,0,0,.06);
+  --solid: #f9f9f9; --shadow: rgba(0,0,0,.14); --thumb: rgba(0,0,0,.08);
+  --new: #c25e00; --onnew: #fff; --ok: #0f7b0f; --danger: #c42b1c;
+  --disc: #4c6b22; --discfg: #d8f86a; --pricebg: rgba(0,0,0,.08);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: transparent; }
+body { color: var(--fg); font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif; overflow: hidden; }
+button { font: inherit; color: var(--fg); cursor: pointer; border: 1px solid var(--ctlline); background: var(--ctl); border-radius: 4px; padding: 4px 12px; white-space: nowrap; }
+button:hover { background: var(--ctlhover); }
+button:active { background: var(--press); color: var(--fg2); }
+button.primary { background: var(--accent); border-color: transparent; color: #000; }
+:root.light button.primary { color: #fff; }
+button.primary:hover { filter: brightness(.94); }
+button.ghost { background: transparent; border-color: transparent; }
+button.ghost:hover { background: var(--hover); }
+button:disabled { opacity: .45; cursor: default; }
+a { color: var(--accent); cursor: pointer; text-decoration: none; }
+a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--fg3); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+#top { display: flex; align-items: center; gap: 8px; padding: 14px 22px 10px; flex-shrink: 0; flex-wrap: wrap; }
+#top h2 { margin: 0 4px 0 0; font-size: 20px; font-weight: 600; }
+.count { display: inline-flex; align-items: center; justify-content: center; height: 18px; min-width: 18px; padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 1; font-weight: 600; background: var(--new); color: var(--onnew); }
+.seg { display: inline-flex; border: 1px solid var(--ctlline); border-radius: 5px; overflow: hidden; margin-left: 8px; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--fg2); padding: 3px 12px; }
+.seg button.on { background: var(--ctlhover); color: var(--fg); font-weight: 600; }
+#status { flex: 1; min-width: 120px; text-align: right; color: var(--fg3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status.err { color: var(--danger); }
+#main { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 22px 60px; scroll-behavior: auto; }
+#list { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+/* 一条 */
+.post { border-radius: 8px; background: var(--card); border: 1px solid var(--line); padding: 14px 16px 10px; position: relative; }
+.post.seen { opacity: .86; }
+.post.fresh { border-color: color-mix(in srgb, var(--new) 55%, transparent); }
+.src { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.av { width: 36px; height: 36px; border-radius: 6px; background: var(--thumb) center/cover no-repeat; flex-shrink: 0; overflow: hidden; }
+.av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.src .who { min-width: 0; flex: 1; }
+.src .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src .name a { color: var(--fg); }
+.src .meta { color: var(--fg3); font-size: 12px; }
+.badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; flex-shrink: 0; }
+.badge.new { background: var(--new); color: var(--onnew); }
+.badge.rel { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.badge.typ { background: var(--chip); color: var(--fg2); }
+.post.ev { cursor: pointer; }
+.post.ev.open { cursor: default; }
+.post.ev.open .title, .post.ev.open .cover { cursor: pointer; }
+.tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-right: -6px; }
+.icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: transparent; border-color: transparent; color: var(--fg2); }
+.icon:hover { background: var(--hover); color: var(--fg); }
+.icon svg { width: 17px; height: 17px; fill: currentColor; }
+.menu { position: absolute; right: 12px; top: 48px; z-index: 6; min-width: 200px; max-width: 320px; background: var(--solid); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px var(--shadow); cursor: default; }
+.menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; }
+.menu button:hover { background: var(--hover); }
+.menu .hint { color: var(--fg3); font-size: 12px; padding: 4px 10px 6px; white-space: normal; }
+/* 底栏：左 愿望单，中间 展开/收起，右 点赞评论数 */
+.post.ev .foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.foot .fl { display: flex; gap: 6px; justify-self: start; }
+.foot .fr { justify-self: end; }
+.foot .fr .stat { margin-left: 0; }
+button.tg { display: inline-flex; align-items: center; gap: 4px; background: transparent; border-color: transparent; color: var(--fg3); font-size: 12.5px; padding: 3px 14px; border-radius: 14px; }
+button.tg:hover { background: var(--hover); color: var(--fg); }
+button.tg svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s; }
+.post.open button.tg svg { transform: rotate(180deg); }
+.also { color: var(--fg3); }
+.icon.trb { font-size: 13px; font-weight: 600; }
+.icon.trb.on { color: var(--accent); }
+.trnote { color: var(--fg3); font-size: 12px; margin: -6px 0 8px; }
+.trnote.err { color: var(--danger); }
+.trnote .dot { display: inline-block; width: 6px; height: 6px; border-radius: 3px; background: var(--accent); margin-right: 6px; vertical-align: middle; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.cmts .chead a { margin-left: 6px; font-size: 12px; }
+/* 评论 */
+.cmts { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; cursor: default; }
+.cmts .chead { color: var(--fg3); font-size: 12px; margin-bottom: 4px; }
+.cmt { display: flex; gap: 10px; padding: 6px 0; }
+.cmt .cav { width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; background: var(--thumb); object-fit: cover; }
+.cmt .cbody { min-width: 0; flex: 1; }
+.cmt .cwho { font-size: 12.5px; color: var(--fg2); }
+.cmt .cwho b { color: var(--fg); font-weight: 600; margin-right: 6px; }
+.cmt .ctext { overflow-wrap: anywhere; user-select: text; font-size: 13.5px; }
+.cmt .ctext blockquote { margin: 4px 0; padding: 4px 10px; border-left: 3px solid var(--line); background: var(--card2); color: var(--fg2); }
+.cmts .cmore { margin-top: 2px; font-size: 12.5px; padding: 2px 10px; }
+.cmts .cerr { color: var(--fg3); font-size: 12.5px; }
+.title { margin: 2px 0 10px; font-size: 18px; font-weight: 600; line-height: 1.35; cursor: pointer; }
+.title:hover { color: var(--accent); }
+.cover { display: block; width: 100%; border-radius: 6px; cursor: pointer; background: var(--thumb); aspect-ratio: 16 / 9; object-fit: cover; }
+.cover.wide { aspect-ratio: auto; }
+.summary { color: var(--fg2); margin: 10px 0 4px; overflow-wrap: anywhere; }
+.notice { margin: 12px 0; color: var(--fg); }
+.desc { color: var(--fg2); margin: 12px 0 4px; }
+.foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.foot .stat { margin-left: auto; color: var(--fg3); font-size: 12px; }
+.foot button { padding: 3px 10px; font-size: 13px; }
+button.wish.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+
+/* 正文（Steam 新闻的 BBCode） */
+.body { margin-top: 12px; color: var(--fg); overflow-wrap: anywhere; user-select: text; }
+.body img, .body video { max-width: 100%; border-radius: 4px; display: block; margin: 8px 0; height: auto; }
+.body h3, .body h4, .body h5 { margin: 16px 0 6px; }
+.body h3 { font-size: 18px; } .body h4 { font-size: 16px; } .body h5 { font-size: 14px; }
+.body p { margin: 6px 0; }
+.body blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid var(--line); background: var(--card2); }
+.body table { border-collapse: collapse; margin: 8px 0; }
+.body td, .body th { border: 1px solid var(--line); padding: 4px 8px; }
+.body .spoiler { background: var(--fg3); color: transparent; border-radius: 3px; }
+.body .spoiler:hover { color: var(--fg); background: var(--chip); }
+.body .yt { position: relative; display: block; margin: 8px 0; }
+.body .yt img { margin: 0; }
+.body .yt span { position: absolute; left: 10px; bottom: 10px; background: rgba(0,0,0,.75); color: #fff; padding: 2px 10px; border-radius: 4px; font-size: 13px; }
+.body hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+
+/* 游戏链接卡片（和 Steam 新闻里的一样：左边封面，右边简介、标签、日期、价格） */
+.appcard { display: flex; margin: 12px 0 4px; border-radius: 6px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); cursor: pointer; color: var(--fg); text-decoration: none; min-height: 150px; }
+.appcard:hover { background: var(--cardhover); text-decoration: none; }
+.appcard .cap { width: 46%; max-width: 330px; flex-shrink: 0; object-fit: cover; background: var(--thumb); }
+.appcard .info { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.appcard .aname { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.appcard .ashort { color: var(--fg2); font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.tags span { background: var(--chip); color: var(--fg2); font-size: 11px; padding: 1px 6px; border-radius: 3px; }
+.appcard .adate { color: var(--fg3); font-size: 12px; }
+.price { margin-top: auto; align-self: flex-end; display: flex; align-items: stretch; border-radius: 3px; overflow: hidden; font-size: 13px; }
+.price > * { display: flex; align-items: center; padding: 2px 8px; }
+.price .newtag { background: #4a7fd0; color: #fff; font-size: 12px; }
+.price .pct { background: var(--disc); color: var(--discfg); font-weight: 700; font-size: 16px; }
+.price .amt { background: var(--pricebg); flex-direction: column; align-items: flex-end; justify-content: center; line-height: 1.2; padding: 3px 9px; }
+.price .orig { text-decoration: line-through; color: var(--fg3); font-size: 11px; }
+.price .cny { color: var(--fg3); font-size: 11px; }
+
+/* 已读分界线 */
+#divider { display: flex; align-items: center; gap: 10px; color: var(--fg3); font-size: 12px; margin: 4px 0; }
+#divider::before, #divider::after { content: ""; flex: 1; border-top: 1px dashed var(--fg3); opacity: .6; }
+
+.more { text-align: center; color: var(--fg3); padding: 16px; font-size: 13px; }
+.empty { max-width: 520px; margin: 80px auto; text-align: center; color: var(--fg2); line-height: 1.8; }
+.empty h3 { color: var(--fg); margin: 0 0 8px; font-size: 18px; }
+.empty button { margin-top: 14px; }
+
+#totop { position: fixed; right: 30px; bottom: 26px; width: 40px; height: 40px; border-radius: 20px; padding: 0; font-size: 18px; opacity: 0; pointer-events: none; transition: opacity .15s; background: var(--solid); box-shadow: 0 4px 12px var(--shadow); }
+#totop.on { opacity: 1; pointer-events: auto; }
+#newpill { position: fixed; left: 50%; transform: translateX(-50%); top: 70px; z-index: 5; display: none; background: var(--accent); color: #000; border: 0; border-radius: 16px; padding: 5px 16px; box-shadow: 0 4px 12px var(--shadow); }
+:root.light #newpill { color: #fff; }
+#newpill.on { display: block; }
+#toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: var(--solid); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 16px; box-shadow: 0 6px 18px var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; max-width: 80%; }
+#toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <h2>时间线</h2>
+    <span class="count" id="unread" hidden></span>
+    <div class="seg" id="filters">
+      <button data-f="all" class="on">全部</button>
+      <button data-f="release">新发售</button>
+    </div>
+    <span id="status"></span>
+    <button id="jump" title="回到上次读到的地方">跳到上次看到的位置</button>
+    <button id="allread">全部标为已读</button>
+    <button id="refresh" class="ghost" title="重新从 Steam 读取">刷新</button>
+  </div>
+  <div id="main"><div id="list"></div></div>
+</div>
+<button id="newpill">有新内容，点击查看</button>
+<button id="totop" title="回到顶部（同时全部记为已读）">↑</button>
+<div id="toast"></div>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const CLAN = 'https://clan.akamai.steamstatic.com/images';
+
+// ---------- 和程序通信 ----------
+let nextId = 1;
+const pending = new Map();
+const host = {
+  call(method, args) {
+    return new Promise((res, rej) => {
+      const id = nextId++;
+      pending.set(id, { res, rej });
+      chrome.webview.postMessage({ id, method, args: args || {} });
+    });
+  }
+};
+function log(message) { chrome.webview.postMessage({ method: 'log', args: { message: String(message) } }); }
+window.onerror = (m, s, l) => log(m + ' @' + l);
+chrome.webview.addEventListener('message', e => {
+  const d = e.data;
+  if (!d) return;
+  if (d.event) { onEvent(d); return; }
+  const p = pending.get(d.id);
+  if (!p) return;
+  pending.delete(d.id);
+  if (d.ok) p.res(d.result); else { const err = new Error(d.error || '出错了'); err.status = d.status; p.rej(err); }
+});
+
+// ---------- 主题 ----------
+function applyTheme(theme, accent) {
+  document.documentElement.classList.toggle('light', theme === 'light');
+  if (accent) document.documentElement.style.setProperty('--accent', accent);
+}
+{ const q = new URLSearchParams(location.search); applyTheme(q.get('theme'), q.get('accent')); }
+
+// ---------- 状态 ----------
+// S 由程序保存在 snf.state.json：readUpTo（这个时间及以前的都算已读）、seen（比它新、已经看过的）、tlPos（上次的位置）
+let S = { readUpTo: 0, seen: {}, tlPos: null, filter: 'all' };
+let status = {};
+const items = new Map();          // key -> 条目
+const views = {};                 // filter -> { keys, done, loading, error }
+let current = null;
+let posRestored = false;
+// 「上次看到这里」分界线：离开（退出、最小化、缩到托盘）时记下当时的阅读进度，回来后一直停在那里不动；
+// 手动刷新后先隐藏，等下次离开时再记。存在 S.divAt 里，下次打开程序也用它。
+let divAt = 0;
+function leave() { divAt = S.divAt = S.readUpTo || 0; placeDivider(); updateButtons(); save(); }
+let saveTimer = 0;
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => host.call('saveState', { state: S }).catch(() => {}), 800); }
+// 退出前程序直接调用：马上记下位置，返回要保存的进度
+window.snfFlush = () => { clearTimeout(saveTimer); try { savePosition(); } catch (e) {} S.divAt = S.readUpTo || 0; clearTimeout(saveTimer); return S; };
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function safeUrl(u) { u = String(u || '').trim(); return /^https?:\/\//i.test(u) ? u : ''; }
+function toast(text, ms) { const t = $('#toast'); t.textContent = text; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), ms || 2500); }
+function errText(e) { return (e && e.message) || String(e); }
+
+function when(t) {
+  const d = new Date(t * 1000), now = new Date(), diff = (now - d) / 1000;
+  if (diff >= 0 && diff < 60) return '刚刚';
+  if (diff >= 0 && diff < 3600) return Math.floor(diff / 60) + ' 分钟前';
+  if (diff >= 0 && diff < 86400) return Math.floor(diff / 3600) + ' 小时前';
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return (d.getFullYear() !== now.getFullYear() ? d.getFullYear() + '年' : '') + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+}
+function day(t) { const d = new Date(t * 1000); return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+function shortDay(t) { const d = new Date(t * 1000); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+
+// ---------- Steam 新闻正文（BBCode → HTML） ----------
+function bb(src) {
+  src = String(src || '').replace(/\{STEAM_CLAN_IMAGE\}/g, CLAN).replace(/\r\n?/g, '\n');
+  const slots = [];
+  const put = html => '\u0001' + (slots.push(html) - 1) + '\u0001';
+  const attr = (s, k) => { const m = new RegExp(k + '\\s*=\\s*("([^"]*)"|\'([^\']*)\'|([^\\s\\]]+))', 'i').exec(s || ''); return m ? (m[2] ?? m[3] ?? m[4] ?? '') : ''; };
+  src = src.replace(/\[img([^\]]*)\]([\s\S]*?)\[\/img\]/gi, (_, a, inner) => { const u = safeUrl(attr(a, 'src') || inner.trim()); return u ? put(`<img src="${esc(u)}" loading="lazy" onerror="this.remove()">`) : ''; });
+  src = src.replace(/\[previewyoutube=["']?([\w-]+)[^\]]*\]\s*\[\/previewyoutube\]/gi, (_, id) => put(`<a class="yt" href="https://www.youtube.com/watch?v=${esc(id)}"><img src="https://i.ytimg.com/vi/${esc(id)}/hqdefault.jpg" loading="lazy" onerror="this.style.display='none'"><span>▶ 在 YouTube 观看</span></a>`));
+  src = src.replace(/\[video([^\]]*)\]\s*\[\/video\]/gi, (_, a) => { const webm = safeUrl(attr(a, 'webm')), mp4 = safeUrl(attr(a, 'mp4')), poster = safeUrl(attr(a, 'poster')); return (webm || mp4) ? put(`<video controls muted preload="none" ${poster ? `poster="${esc(poster)}"` : ''}>${webm ? `<source src="${esc(webm)}" type="video/webm">` : ''}${mp4 ? `<source src="${esc(mp4)}" type="video/mp4">` : ''}</video>`) : ''; });
+  src = src.replace(/\[dynamiclink([^\]]*)\]\s*\[\/dynamiclink\]/gi, (_, a) => { const u = safeUrl(attr(a, 'href')); return u ? put(`<a href="${esc(u)}">${esc(u)}</a>`) : ''; });
+  src = src.replace(/\[url\]([^\[]+)\[\/url\]/gi, (_, u) => { const s = safeUrl(u); return s ? put(`<a href="${esc(s)}">${esc(s)}</a>`) : esc(u); });
+  const tagRe = /\[(\/?)([a-z0-9*]+)((?:=|\s)[^\]]*)?\]/gi;
+  const simple = { b: 'strong', i: 'em', u: 'u', strike: 's', h1: 'h3', h2: 'h4', h3: 'h5', p: 'p', quote: 'blockquote', code: 'code', list: 'ul', olist: 'ol', table: 'table', tr: 'tr', td: 'td', th: 'th', carousel: 'div' };
+  let out = '', last = 0, m;
+  while ((m = tagRe.exec(src))) {
+    out += esc(src.slice(last, m.index)).replace(/\n/g, '<br>');
+    last = tagRe.lastIndex;
+    const close = m[1] === '/', name = m[2].toLowerCase(), arg = (m[3] || '').replace(/^=/, '').trim();
+    if (simple[name]) out += close ? `</${simple[name]}>` : `<${simple[name]}>`;
+    else if (name === '*') out += close ? '' : '<li>';
+    else if (name === 'hr') out += close ? '' : '<hr>';
+    else if (name === 'url') { if (close) out += '</a>'; else { const u = safeUrl(arg.replace(/^["']|["']$/g, '')); out += u ? `<a href="${esc(u)}">` : '<a>'; } }
+    else if (name === 'spoiler') out += close ? '</span>' : '<span class="spoiler">';
+    else if (name === 'expand') out += close ? '</details>' : '<details><summary>展开</summary>';
+    else if (name === 'noparse' || name === 'list' || name === 'olist') out += '';
+    else if (!/^(img|video|previewyoutube|dynamiclink|h\d|pullquote|c|color|size|font|align|center|left|right|i|b|u)$/.test(name) && !simple[name]) out += esc(m[0]);   // 不认识的：原样显示（像 [DLC] 这种正文里的方括号）
+  }
+  out += esc(src.slice(last)).replace(/\n/g, '<br>');
+  out = out.replace(/\u0001(\d+)\u0001/g, (_, i) => slots[+i]);
+  const block = '(?:p|ul|ol|li|h3|h4|h5|blockquote|table|tr|td|th|hr|div|details|summary|img|video|a class="yt")';
+  out = out.replace(new RegExp('(<\\/?' + block + '[^>]*>)\\s*(?:<br>\\s*)+', 'g'), '$1').replace(new RegExp('(?:<br>\\s*)+(<\\/?' + block + '[^>]*>)', 'g'), '$1');
+  return out;
+}
+function plain(src) {
+  return String(src || '').replace(/\{STEAM_CLAN_IMAGE\}[^\s\[]*/g, '').replace(/\[img[\s\S]*?\[\/img\]/gi, '').replace(/\[previewyoutube[\s\S]*?\[\/previewyoutube\]/gi, '').replace(/\[[^\]]{1,80}\]/g, ' ').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
+}
+function firstImage(body) {
+  const m = /\[img(?:[^\]]*src=["']?([^"'\]\s]+))?[^\]]*\]([^\[]*)\[\/img\]/i.exec(String(body || '').replace(/\{STEAM_CLAN_IMAGE\}/g, CLAN));
+  return m ? safeUrl(m[1] || m[2].trim()) : '';
+}
+
+// ---------- 卡片 ----------
+function wishButton(app) {
+  if (!app) return '';
+  if (app.owned) return `<button disabled title="你已经拥有">已拥有</button>`;
+  return `<button class="wish${app.wish ? ' on' : ''}" data-wish="${app.appid}">${app.wish ? '✓ 已在愿望单' : '＋ 愿望单'}</button>`;
+}
+function priceHtml(app) {
+  const p = app.price, isNew = app.releaseTs && Date.now() / 1000 - app.releaseTs < 14 * 86400 && !app.comingSoon;
+  let h = isNew ? '<span class="newtag">新品</span>' : '';
+  if (!p) return app.free ? `<div class="price">${h}<span class="amt">免费</span></div>` : (h ? `<div class="price">${h}</div>` : '');
+  if (p.pct > 0) h += `<span class="pct">-${p.pct}%</span>`;
+  h += `<span class="amt">${p.pct > 0 && p.original ? `<span class="orig">${esc(p.original)}</span>` : ''}<span>${esc(p.final)}</span>${p.cny != null ? `<span class="cny">≈ ¥${p.cny.toFixed(2)}</span>` : ''}</span>`;
+  return `<div class="price">${h}</div>`;
+}
+function appCard(app) {
+  return `<a class="appcard" data-open="${esc(app.url)}">
+    <img class="cap" src="${esc(app.capsule || app.header)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="info">
+      <div class="aname">${esc(app.name)}${app.type !== 0 ? `<span class="badge typ">${esc(app.typeName)}</span>` : ''}</div>
+      ${app.short ? `<div class="ashort">${esc(app.short)}</div>` : ''}
+      ${app.tags && app.tags.length ? `<div class="tags">${app.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
+      ${app.releaseTs ? `<div class="adate">${day(app.releaseTs)}</div>` : ''}
+      ${priceHtml(app)}
+    </div></a>`;
+}
+function isNewItem(it) { return current && current.filter === 'all' && S.readUpTo && it.t > S.readUpTo && !S.seen[it.key]; }
+const STEAM_SVG = '<svg viewBox="0 0 24 24"><path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/></svg>';
+function sourceHtml(it, extra) {
+  const s = it.source || {};
+  const openUrl = it.kind === 'release' ? it.release.url : it.url;
+  return `<div class="src">
+    <div class="av">${s.icon ? `<img src="${esc(s.icon)}" loading="lazy" onerror="this.remove()">` : ''}</div>
+    <div class="who"><div class="name">${s.url ? `<a data-open="${esc(s.url)}">${esc(s.name)}</a>` : esc(s.name)}</div><div class="meta">${extra}</div></div>
+    ${isNewItem(it) ? '<span class="badge new">新</span>' : ''}
+    ${it.release ? `<span class="badge rel">新发售${it.release.type !== 0 ? ' · ' + esc(it.release.typeName) : ''}</span>` : ''}
+    <div class="tools">
+      ${status.tr && it.kind !== 'release' && it.gid ? `<button class="icon trb${trShown(it) ? ' on' : ''}" data-tr title="翻译 / 显示原文">译</button>` : ''}
+      ${openUrl ? `<button class="icon" data-open="${esc(openUrl)}" title="在浏览器中打开（Steam）">${STEAM_SVG}</button>` : ''}
+      ${it.block && it.block.length ? `<button class="icon" data-menu title="屏蔽…"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>` : ''}
+    </div>
+  </div>`;
+}
+function alsoHtml(it) {
+  if (!it.dups) return '';
+  const names = it.also || [];
+  if (!names.length) return ` · <span class="also">另有 ${it.dups} 个账号也发了</span>`;
+  const shown = names.slice(0, 2).map(esc).join('、') + (names.length > 2 ? ` 等 ${names.length} 个` : '');
+  return ` · <span class="also" title="${esc(names.join('、'))}">${shown} 也发了</span>`;
+}
+function statsHtml(it) {
+  return it.votes || it.comments ? `<span class="stat">👍 ${it.votes || 0} · 💬 ${it.comments || 0}</span>` : '';
+}
+function eventPost(it) {
+  const img = it.image || firstImage(it.body) || (it.release && it.release.capsule) || '';
+  const sum = it.summary || plain(it.body);
+  const meta = `${when(it.t)} · ${esc(it.type)}${it.fromGamePage ? ' · 来自游戏页面' : ''}${alsoHtml(it)}`;
+  const wish = wishButton(it.release || it.app), stats = statsHtml(it);
+  return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
+    ${sourceHtml(it, meta)}
+    <h3 class="title" data-toggle>${esc(trTitle(it))}</h3>
+    <div class="trnote"${trNote(it) ? '' : ' hidden'}>${trNote(it)}</div>
+    ${img ? `<img class="cover" src="${esc(img)}" loading="lazy" data-toggle onerror="this.remove()">` : ''}
+    <div class="summary">${esc(trSummary(it, sum))}</div>
+    <div class="body" hidden></div>
+    ${it.release ? appCard(it.release) : ''}
+    <div class="foot"><div class="fl">${wish}</div><button class="tg" data-toggle><span>展开全文</span><svg viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button><div class="fr">${stats}</div></div>
+    ${it.comments > 0 ? `<div class="cmts">${commentsInner(it)}</div>` : ''}
+  </article>`;
+}
+// 关注的发行商新发售、但没有发售新闻的游戏：按 Steam 发售通知的样子生成一张
+function releasePost(it) {
+  const a = it.release, p = a.price;
+  let notice = `《${esc(a.name)}》${a.type === 0 ? '正式发售啦！' : '现已推出！'}`;
+  if (p && p.pct > 0) notice += `为庆祝发售，现在购买可享 ${p.pct}% 优惠${p.end ? `（到 ${shortDay(p.end)}）` : ''}哦！`;
+  const meta = `${when(it.t)} · 新发售`;
+  return `<article class="post${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}">
+    ${sourceHtml(it, meta)}
+    <h3 class="title" data-open="${esc(a.url)}">《${esc(a.name)}》 – ${a.type === 0 ? '现已正式发售！' : '现已推出！'}</h3>
+    ${a.capsule ? `<img class="cover" src="${esc(a.capsule)}" loading="lazy" data-open="${esc(a.url)}" onerror="this.remove()">` : ''}
+    <div class="notice">${notice}</div>
+    ${appCard(a)}
+    ${a.short ? `<div class="desc">${esc(a.short)}</div>` : ''}
+    ${wishButton(a) ? `<div class="foot">${wishButton(a)}</div>` : ''}
+  </article>`;
+}
+function postHtml(it) { return it.kind === 'release' ? releasePost(it) : eventPost(it); }
+
+// ---------- 列表 ----------
+function newView(filter) { return { filter, keys: [], done: false, loading: false, error: null, scroll: 0, settled: false }; }
+
+function render() {
+  const list = $('#list');
+  if (!status.loggedIn) {
+    list.innerHTML = `<div class="empty"><h3>登录 Steam 后使用</h3>新闻流、关注的发行商和愿望单都要用你的 Steam 账号。<br>登录在 Steam 官方的登录页里完成，账号密码不经过这个程序。<br><button class="primary" id="login">登录 Steam</button></div>`;
+    $('#login').onclick = () => host.call('login').then(st => { status = Object.assign(status, st); }).catch(e => toast(errText(e)));
+    return;
+  }
+  if (!status.ready && !current.keys.length) {
+    list.innerHTML = `<div class="empty"><h3>正在读取…</h3>${esc(status.progress || '第一次会稍慢：要读新闻流，还要检查每个关注的发行商最近出的游戏')}</div>`;
+    return;
+  }
+  const v = current;
+  if (!v.keys.length && v.done) {
+    list.innerHTML = `<div class="empty"><h3>${v.filter === 'release' ? '最近没有新发售' : '没有新闻'}</h3>${v.filter === 'release' ? '关注的发行商最近发售的游戏会出现在这里。' : ''}</div>`;
+    return;
+  }
+  list.innerHTML = v.keys.map(k => postHtml(items.get(k))).join('') + moreHtml(v);
+  placeDivider();
+  observeAll();
+}
+function moreHtml(v) {
+  if (v.error) return `<div class="more">出错了：${esc(v.error)} <a id="retry">重试</a></div>`;
+  if (v.done) return `<div class="more">没有更多了</div>`;
+  return `<div class="more" id="more">${v.loading ? '正在加载…' : ''}</div>`;
+}
+function updateMore() {
+  const old = document.querySelector('#list > .more'); if (!old) return;
+  old.outerHTML = moreHtml(current);
+  const r = $('#retry'); if (r) r.onclick = () => loadMore(current);
+  const m = $('#more'); if (m) moreObserver.observe(m);
+}
+
+async function loadMore(v) {
+  if (v.loading || v.done || !status.loggedIn) return;
+  v.loading = true; v.error = null; if (v === current) updateMore();
+  try {
+    const r = await host.call('entries', { offset: v.keys.length, count: 30, filter: v.filter });
+    const before = v.keys.length;
+    for (const it of r.items) { items.set(it.key, it); if (!v.keys.includes(it.key)) v.keys.push(it.key); }
+    if (r.done || !r.items.length) v.done = true;
+    v.loading = false;
+    if (v === current) {
+      if (!before) render();
+      else {
+        const html = v.keys.slice(before).map(k => postHtml(items.get(k))).join('');
+        const more = document.querySelector('#list > .more');
+        if (more) more.insertAdjacentHTML('beforebegin', html); else $('#list').insertAdjacentHTML('beforeend', html);
+        updateMore(); placeDivider(); observeAll();
+      }
+    }
+  } catch (e) { v.loading = false; v.error = errText(e); if (v === current) updateMore(); }
+  if (v.filter === 'all') afterTimelineLoad(v);
+}
+
+function openFilter(f) {
+  if (current) current.scroll = $('#main').scrollTop;
+  S.filter = f; save();
+  for (const b of document.querySelectorAll('#filters button')) b.classList.toggle('on', b.dataset.f === f);
+  if (!views[f]) views[f] = newView(f);
+  current = views[f];
+  render();
+  $('#main').scrollTop = current.scroll || 0;
+  if (!current.keys.length && !current.done) loadMore(current);
+  updateTop(); updateButtons();
+}
+// 重新从头加载（刷新完成、点了“有新内容”）
+function reload(keepScroll) {
+  for (const f of Object.keys(views)) delete views[f];
+  const f = current ? current.filter : 'all';
+  current = null;
+  openFilter(f);
+  if (!keepScroll) $('#main').scrollTop = 0;
+  $('#newpill').classList.remove('on');
+}
+
+// ---------- 阅读进度 ----------
+// readUpTo：这个时间及以前的都算已读。比它新的，在屏幕上露出来一会儿就记为看过（seen）；
+// 从最新一条到分界线之间都看过了，分界线就往上移。
+function boundaryIndex(v, t) { if (t == null) t = S.readUpTo; const i = v.keys.findIndex(k => items.get(k).t <= t); return i < 0 ? v.keys.length : i; }
+function dividerIndex(v) { return divAt ? boundaryIndex(v, divAt) : 0; }
+function afterTimelineLoad(v) {
+  if (!v.keys.length) return;
+  if (!S.readUpTo) { S.readUpTo = items.get(v.keys[0]).t; save(); toast('从现在开始记录阅读进度', 3500); if (v === current) render(); }
+  // 一直加载到上次的分界线出现，这样未读数才准（最多 600 条）
+  const last = items.get(v.keys[v.keys.length - 1]);
+  if (!v.done && !v.error && last.t > S.readUpTo && v.keys.length < 600) { loadMore(v); return; }
+  updateBoundary(v);
+  if (!v.settled) { v.settled = true; if (v === current && !posRestored) restorePosition(); }
+}
+function updateBoundary(v) {
+  const b = boundaryIndex(v);
+  let i = b - 1;
+  while (i >= 0 && S.seen[v.keys[i]]) i--;
+  if (i + 1 < b) {
+    S.readUpTo = items.get(v.keys[i + 1]).t;
+    for (const k of Object.keys(S.seen)) { const it = items.get(k); if (!it || it.t <= S.readUpTo) delete S.seen[k]; }
+    save();
+  }
+  updateButtons();
+}
+function markAllRead() {
+  const v = views.all; if (!v || !v.keys.length) return;
+  S.readUpTo = Math.max(S.readUpTo, items.get(v.keys[0]).t); S.seen = {}; save();
+  for (const el of document.querySelectorAll('.post.fresh')) { el.classList.remove('fresh'); el.classList.add('seen'); const n = el.querySelector('.badge.new'); if (n) n.remove(); }
+  updateButtons();
+}
+function markSeen(key) {
+  const v = views.all; if (!v || S.seen[key]) return;
+  const it = items.get(key); if (!it || it.t <= S.readUpTo) return;
+  S.seen[key] = 1; save();
+  const el = document.querySelector(`.post[data-key="${CSS.escape(key)}"]`);
+  if (el) { el.classList.remove('fresh'); el.classList.add('seen'); const n = el.querySelector('.badge.new'); if (n) n.remove(); }
+  clearTimeout(markSeen.t); markSeen.t = setTimeout(() => updateBoundary(v), 300);
+}
+function placeDivider() {
+  const old = $('#divider'); if (old) old.remove();
+  const v = current; if (!v || v.filter !== 'all') return;
+  const b = dividerIndex(v);
+  if (b > 0 && b < v.keys.length) {
+    const el = document.querySelector(`.post[data-key="${CSS.escape(v.keys[b])}"]`);
+    if (el) el.insertAdjacentHTML('beforebegin', '<div id="divider">上次看到这里</div>');
+  }
+}
+function updateButtons() {
+  const v = current, all = views.all;
+  const b = all ? boundaryIndex(all) : 0, d = all ? dividerIndex(all) : 0;
+  $('#jump').disabled = !(v && v.filter === 'all' && d > 0 && d < all.keys.length);
+  $('#allread').disabled = !(all && all.keys.length && (b > 0 || Object.keys(S.seen).length));
+}
+const seenObserver = new IntersectionObserver(entries => {
+  const rootH = $('#main').clientHeight;
+  for (const e of entries) {
+    const el = e.target;
+    const enough = e.isIntersecting && (e.intersectionRatio >= 0.5 || e.intersectionRect.height >= rootH * 0.45);
+    if (enough) { if (!el._t) el._t = setTimeout(() => { el._t = 0; markSeen(el.dataset.key); }, 700); }
+    else { clearTimeout(el._t); el._t = 0; }
+  }
+}, { root: document.getElementById('main'), threshold: [0, 0.25, 0.5, 0.75, 1] });
+const moreObserver = new IntersectionObserver(entries => { for (const e of entries) if (e.isIntersecting && current) loadMore(current); }, { root: document.getElementById('main'), rootMargin: '800px 0px' });
+// ---------- 评论 ----------
+// 有评论的新闻，滚到附近时读最新的几条直接显示；「查看更多」再往下读。读过的记在 cmtCache 里，重新渲染不再读。
+const cmtCache = new Map();   // key -> { total, list: [], loading, error }
+function commentsInner(it) {
+  const c = cmtCache.get(it.key);
+  if (!c || (!c.list.length && c.loading)) return `<div class="chead">💬 ${it.comments} 条评论 · 正在读取…</div>`;
+  if (c.error && !c.list.length) return `<div class="cerr">评论读取失败：${esc(c.error)} <a data-cmore>重试</a></div>`;
+  const total = Math.max(c.total, c.list.length);
+  let link = '';
+  if (status.tr && c.list.length && !c.loading) {
+    if (c.trLoading) link = '<a>正在翻译…</a>';
+    else if (c.list.some(x => x.tr)) link = `<a data-ctr>${c.trOn ? '显示原文' : '显示译文'}</a>`;
+    else if (c.list.some(x => needsTr(htmlText(x.html)))) link = '<a data-ctr>翻译评论</a>';
+  }
+  if (c.trError) link += ` <span class="cerr">翻译失败：${esc(c.trError)}</span>`;
+  let h = `<div class="chead">💬 ${total} 条评论${link}</div>` + c.list.map(x => cmtHtml(x, c.trOn)).join('');
+  if (c.loading) h += `<div class="cerr">正在读取…</div>`;
+  else if (c.error) h += `<div class="cerr">${esc(c.error)} <a data-cmore>重试</a></div>`;
+  else if (total > c.list.length) h += `<button class="ghost cmore" data-cmore>查看更多评论（还有 ${total - c.list.length} 条）</button>`;
+  return h;
+}
+function cmtHtml(c, trOn) {
+  return `<div class="cmt">${c.avatar ? `<img class="cav" src="${esc(c.avatar)}" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="cav"></div>'}
+    <div class="cbody"><div class="cwho">${c.url ? `<b><a data-open="${esc(c.url)}" style="color:inherit">${esc(c.name)}</a></b>` : `<b>${esc(c.name)}</b>`}${c.t ? when(c.t) : ''}</div>
+    <div class="ctext">${trOn && c.tr ? esc(c.tr).replace(/\n/g, '<br>') : c.html}</div></div></div>`;
+}
+// Steam 渲染好的评论 HTML → 只留文字、换行、链接、引用（不直接插 Steam 的 HTML）
+function cleanCommentNode(node) {
+  let out = '';
+  for (const n of node.childNodes) {
+    if (n.nodeType === 3) { out += esc(n.textContent); continue; }
+    if (n.nodeType !== 1) continue;
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'br') out += '<br>';
+    else if (tag === 'img') out += esc(n.getAttribute('alt') || '');
+    else if (tag === 'a') { const u = safeUrl(n.getAttribute('href')); const inner = cleanCommentNode(n); out += u ? `<a data-open="${esc(u)}">${inner}</a>` : inner; }
+    else if (tag === 'blockquote' || n.classList.contains('bb_blockquote')) out += `<blockquote>${cleanCommentNode(n)}</blockquote>`;
+    else if (tag === 'script' || tag === 'style') continue;
+    else out += cleanCommentNode(n);
+  }
+  return out;
+}
+function parseComments(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  return [...doc.querySelectorAll('.commentthread_comment')].map(el => {
+    const a = el.querySelector('.commentthread_author_link');
+    const name = a ? (a.querySelector('bdi') || a).textContent.trim() : '';
+    const av = el.querySelector('.commentthread_comment_avatar a img') || el.querySelector('.commentthread_comment_avatar img');
+    const ts = el.querySelector('[data-timestamp]');
+    const tx = el.querySelector('.commentthread_comment_text');
+    return { id: el.id, name: name || '（匿名）', url: a ? safeUrl(a.getAttribute('href')) : '', avatar: av ? safeUrl(av.getAttribute('src')) : '', t: ts ? +ts.getAttribute('data-timestamp') : 0, html: tx ? cleanCommentNode(tx).replace(/^(\s|<br>)+|(\s|<br>)+$/g, '') : '' };
+  });
+}
+async function loadComments(key, more) {
+  const it = items.get(key); if (!it || !it.gid) return;
+  let c = cmtCache.get(key);
+  if (c && (c.loading || (!more && !c.error && c.list.length))) return;
+  if (!c) { c = { total: it.comments, list: [], loading: false, error: null }; cmtCache.set(key, c); }
+  c.loading = true; c.error = null; paintComments(key);
+  try {
+    const r = await host.call('comments', { gid: it.gid, start: c.list.length, count: c.list.length ? 10 : 3 });
+    const got = parseComments(r.html).filter(x => !c.list.some(y => y.id === x.id));
+    c.list.push(...got); c.total = r.total || c.list.length;
+    if (!got.length) c.total = c.list.length;
+  } catch (e) { c.error = errText(e); }
+  c.loading = false; paintComments(key);
+  if (status.autoTr && !c.error) translateComments(key, true);
+}
+function paintComments(key) {
+  const it = items.get(key);
+  const box = document.querySelector(`.post[data-key="${CSS.escape(key)}"] .cmts`);
+  if (box && it) box.innerHTML = commentsInner(it);
+}
+const cmtObserver = new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) { cmtObserver.unobserve(e.target); loadComments(e.target.dataset.key); }
+}, { root: document.getElementById('main'), rootMargin: '400px 0px' });
+
+// ---------- 翻译 ----------
+// trState: key -> { busy, done, error, raw, title, summary, body, orig(显示原文) }
+const trState = new Map();
+const trReq = new Map();      // 请求号 -> key（流式输出用）
+let trSeq = 1, trRunning = 0;
+const trQueue = [];
+function htmlText(html) { const d = document.createElement('div'); d.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n'); return d.textContent.trim(); }
+// 需不需要翻译：粗略看文字是不是已经是目标语言
+function needsTr(text) {
+  text = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/\[[^\]]{1,200}\]/g, ' ');
+  const han = (text.match(/[\u3400-\u9fff]/g) || []).length, kana = (text.match(/[\u3040-\u30ff]/g) || []).length;
+  const hangul = (text.match(/[\uac00-\ud7af]/g) || []).length, latin = (text.match(/[A-Za-z\u00c0-\u024f\u0400-\u04ff]{2,}/g) || []).length;
+  const to = status.trTo || '简体中文';
+  if (han + kana + hangul + latin < 2) return false;
+  if (/中文/.test(to)) return kana > han * 0.15 || hangul > 0 || latin * 2 > han;
+  if (to === 'English') return han + kana + hangul > latin;
+  if (to === '日本語') return kana < 3;
+  return true;
+}
+function trShown(it) { const s = trState.get(it.key); return !!(s && !s.orig && (s.done || s.busy) && (s.title || s.summary || s.body)); }
+function trTitle(it) { const s = trState.get(it.key); return trShown(it) && s.title ? s.title : it.title; }
+function trBody(it) { const s = trState.get(it.key); return trShown(it) && s.body ? s.body : it.body; }
+function trSummary(it, sum) {
+  const s = trState.get(it.key);
+  if (trShown(it)) sum = s.summary || (s.body ? plain(s.body) : sum);
+  return sum.length > 160 ? sum.slice(0, 160) + '…' : sum;
+}
+function trNote(it) {
+  const s = trState.get(it.key); if (!s) return '';
+  if (s.error) return `翻译失败：${esc(s.error)} · <a data-tr>重试</a>`;
+  if (s.busy) return '<span class="dot"></span>正在翻译…';
+  if (s.done) return s.orig ? '🌐 显示的是原文 · <a data-tr>显示译文</a>' : '🌐 机器翻译 · <a data-tr>显示原文</a>';
+  return '';
+}
+function splitTr(raw) {
+  const out = {};
+  for (const name of ['TITLE', 'SUMMARY', 'BODY']) {
+    const m = new RegExp('===' + name + '===\\s*\\n?([\\s\\S]*?)(?=\\n?===(TITLE|SUMMARY|BODY)===|$)').exec(raw || '');
+    out[name.toLowerCase()] = m ? m[1].replace(/\n?=+[A-Z]*=*\s*$/, '').trim() : '';   // 流式时末尾可能有半截分隔行
+  }
+  return out;
+}
+function paintTr(key) {
+  const it = items.get(key), post = document.querySelector(`.post[data-key="${CSS.escape(key)}"]`);
+  if (!it || !post) return;
+  const title = post.querySelector('.title'); if (title) title.textContent = trTitle(it);
+  const note = post.querySelector('.trnote'); if (note) { const n = trNote(it); note.innerHTML = n; note.hidden = !n; note.classList.toggle('err', !!(trState.get(key) || {}).error); }
+  const sum = post.querySelector('.summary'); if (sum) sum.textContent = trSummary(it, it.summary || plain(it.body));
+  const btn = post.querySelector('.trb'); if (btn) btn.classList.toggle('on', trShown(it));
+  const body = post.querySelector('.body');
+  if (body && !body.hidden) {
+    cancelAnimationFrame(paintTr.raf);
+    paintTr.raf = requestAnimationFrame(() => { body.innerHTML = bb(trBody(it)) || '<span style="color:var(--fg3)">（没有正文）</span>'; });
+  } else if (body) body.innerHTML = '';
+}
+function queueTr(key, force) {
+  const it = items.get(key); if (!it || !it.gid) return;
+  let s = trState.get(key);
+  if (s && (s.busy || (s.done && !force))) return;
+  s = { busy: true, done: false, error: null, raw: '', title: '', summary: '', body: '', orig: false };
+  trState.set(key, s); paintTr(key);
+  trQueue.push({ key, force }); pumpTr();
+}
+async function pumpTr() {
+  while (trRunning < 2 && trQueue.length) {
+    const { key, force } = trQueue.shift();
+    const it = items.get(key), s = trState.get(key); if (!it || !s) continue;
+    trRunning++;
+    const req = trSeq++; trReq.set(req, key);
+    host.call('translate', { req, gid: it.gid, title: it.title, summary: it.summary || '', body: it.body || '', force: !!force })
+      .then(r => { Object.assign(s, { title: r.title || '', summary: r.summary || '', body: r.body || '', done: true }); })
+      .catch(e => { s.error = errText(e); })
+      .finally(() => { s.busy = false; trReq.delete(req); trRunning--; paintTr(key); pumpTr(); });
+  }
+}
+function onTrStream(d) {
+  const key = trReq.get(d.req), s = key && trState.get(key); if (!s || !s.busy) return;
+  s.raw = d.text; Object.assign(s, splitTr(d.text)); paintTr(key);
+}
+function clickTr(post) {
+  const key = post.dataset.key, s = trState.get(key);
+  if (s && s.done && !s.error) { s.orig = !s.orig; paintTr(key); return; }
+  if (s && s.busy) return;
+  queueTr(key, !!(s && s.error));
+}
+async function translateComments(key, auto) {
+  const c = cmtCache.get(key); if (!c || c.trLoading) return;
+  const todo = c.list.filter(x => !x.tr && needsTr(htmlText(x.html)));
+  if (!todo.length) { if (!auto && c.list.some(x => x.tr)) { c.trOn = !c.trOn; paintComments(key); } return; }
+  c.trLoading = true; c.trError = null; paintComments(key);
+  try {
+    const r = await host.call('translateTexts', { texts: todo.map(x => htmlText(x.html)) });
+    todo.forEach((x, i) => { if (r[i]) x.tr = r[i]; });
+    c.trOn = true;
+  } catch (e) { c.trError = errText(e); }
+  c.trLoading = false; paintComments(key);
+}
+const trObserver = new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) {
+    trObserver.unobserve(e.target);
+    const it = items.get(e.target.dataset.key);
+    if (status.autoTr && it && needsTr(it.title + ' ' + (it.summary || plain(it.body).slice(0, 400)))) queueTr(it.key);
+  }
+}, { root: document.getElementById('main'), rootMargin: '300px 0px' });
+
+// ---------- 屏蔽 ----------
+function closeMenus() { for (const m of document.querySelectorAll('.post .menu')) m.remove(); }
+function openMenu(post) {
+  const had = post.querySelector('.menu'); closeMenus(); if (had) return;
+  const it = items.get(post.dataset.key); if (!it || !it.block) return;
+  const rows = it.block.map((b, i) => `<button data-block="${i}">${b.kind === 'app' ? '屏蔽游戏《' + esc(b.name) + '》' : '屏蔽账号「' + esc(b.name) + '」'}</button>`).join('');
+  post.insertAdjacentHTML('beforeend', `<div class="menu">${rows}<div class="hint">屏蔽后它的新闻和新发售都不再显示。可以在「设置」里取消。</div></div>`);
+}
+async function doBlock(post, i) {
+  const it = items.get(post.dataset.key), b = it && it.block && it.block[i]; if (!b) return;
+  closeMenus();
+  try { await host.call('block', { kind: b.kind, id: b.id, name: b.name, on: true }); }
+  catch (e) { toast(errText(e), 4000); return; }
+  // 把受影响的几条从页面上拿掉
+  const hit = x => (x.block || []).some(y => y.kind === b.kind && y.id === b.id) || (b.kind === 'app' && ((x.release && x.release.appid === b.id) || (x.app && x.app.appid === b.id)));
+  const gone = new Set([...items.values()].filter(hit).map(x => x.key));
+  for (const v of Object.values(views)) v.keys = v.keys.filter(k => !gone.has(k));
+  for (const k of gone) { const el = document.querySelector(`.post[data-key="${CSS.escape(k)}"]`); if (el) el.remove(); items.delete(k); }
+  placeDivider(); updateButtons();
+  toast(`已屏蔽${b.kind === 'app' ? '游戏《' + b.name + '》' : '账号「' + b.name + '」'}，可以在设置里取消`, 3500);
+}
+
+function toggleBody(post) {
+  const it = items.get(post.dataset.key); if (!it || it.kind === 'release') return;
+  const body = post.querySelector('.body'), btn = post.querySelector('button.tg span');
+  if (body.hidden) {
+    if (!body.innerHTML) body.innerHTML = bb(trBody(it)) || '<span style="color:var(--fg3)">（没有正文）</span>';
+    body.hidden = false; post.querySelector('.summary').hidden = true; post.classList.add('open');
+    if (btn) btn.textContent = '收起';
+  } else {
+    body.hidden = true; post.querySelector('.summary').hidden = false; post.classList.remove('open');
+    if (btn) btn.textContent = '展开全文';
+    if (post.getBoundingClientRect().top < $('#main').getBoundingClientRect().top) post.scrollIntoView({ block: 'start' });
+  }
+}
+
+function observeAll() {
+  if (current && current.filter === 'all') for (const el of document.querySelectorAll('.post.fresh:not([data-obs])')) { el.dataset.obs = 1; seenObserver.observe(el); }
+  for (const el of document.querySelectorAll('.post[data-cmt]:not([data-cobs])')) { el.dataset.cobs = 1; if (!cmtCache.has(el.dataset.key)) cmtObserver.observe(el); }
+  if (status.autoTr) for (const el of document.querySelectorAll('.post.ev:not([data-tobs])')) { el.dataset.tobs = 1; if (!trState.has(el.dataset.key)) trObserver.observe(el); }
+  const m = $('#more'); if (m) moreObserver.observe(m);
+}
+
+// 上次的位置：最上面那条的 key 和它滚出去了多少
+let posTimer = 0;
+function savePosition() {
+  const v = current; if (!v || v.filter !== 'all' || !posRestored) return;
+  const main = $('#main'), top = main.getBoundingClientRect().top;
+  const post = [...document.querySelectorAll('#list > .post')].find(p => p.getBoundingClientRect().bottom > top + 1);
+  if (!post) return;
+  const pos = { key: post.dataset.key, off: Math.round(top - post.getBoundingClientRect().top) };
+  if (!S.tlPos || S.tlPos.key !== pos.key || S.tlPos.off !== pos.off) { S.tlPos = pos; save(); }
+}
+function restorePosition() {
+  posRestored = true;
+  const main = $('#main'); if (main.scrollTop > 50) return;
+  const pos = S.tlPos;
+  let el = pos && document.querySelector(`.post[data-key="${CSS.escape(pos.key)}"]`), off = el ? pos.off : -60;
+  if (!el) el = $('#divider');
+  if (!el) return;
+  main.scrollTop += el.getBoundingClientRect().top - main.getBoundingClientRect().top + off;
+  updateTop();
+}
+function goTop() {
+  const main = $('#main');
+  if (current && current.filter === 'all') markAllRead();
+  main.scrollTop = 0;
+  updateTop();
+}
+function updateTop() { $('#totop').classList.toggle('on', $('#main').scrollTop > 600); }
+
+// ---------- 状态栏 ----------
+function renderStatus() {
+  const st = $('#status');
+  st.classList.toggle('err', !!status.error && !status.refreshing);
+  st.textContent = status.refreshing ? (status.progress || '正在刷新…')
+    : status.error ? status.error
+    : status.lastRefresh ? '上次刷新 ' + when(status.lastRefresh) + (status.followed ? ` · 关注了 ${status.followed} 个发行商 / 鉴赏家` : '') : '';
+  $('#refresh').disabled = !!status.refreshing || !status.loggedIn;
+  $('#refresh').textContent = status.refreshing ? '刷新中…' : '刷新';
+}
+function setStatus(st) {
+  const wasReady = status.ready, wasLogged = status.loggedIn, wasTr = status.tr + '|' + status.autoTr + '|' + status.trTo;
+  status = st || {};
+  renderStatus();
+  if (!current) return;
+  if ((status.ready && !wasReady) || status.loggedIn !== wasLogged) reload(true);
+  else if (wasTr !== status.tr + '|' + status.autoTr + '|' + status.trTo && current.keys.length) { const top = $('#main').scrollTop; render(); $('#main').scrollTop = top; }
+  else if (!status.ready && !current.keys.length) render();
+}
+
+function onEvent(d) {
+  switch (d.event) {
+    case 'status': setStatus(d.status); break;
+    case 'theme': applyTheme(d.theme, d.accent); break;
+    case 'tr': onTrStream(d); break;
+    case 'unread': { const u = $('#unread'); u.hidden = !d.n; u.textContent = d.n > 99 ? '99+' : d.n; break; }
+    case 'updated':
+      // 手动刷新：分界线先隐藏，下次离开时再记（自动定时刷新不动它）
+      if (d.manual) { divAt = S.divAt = 0; placeDivider(); updateButtons(); save(); }
+      if (!current || !status.ready) break;
+      if ($('#main').scrollTop < 80 || !current.keys.length) reload(true);
+      else $('#newpill').classList.add('on');
+      break;
+    case 'action':
+      if (d.action === 'allread') markAllRead();
+      else if (d.action === 'leave') leave();
+      break;
+  }
+}
+
+// ---------- 点击 ----------
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const wish = t.closest('[data-wish]');
+  if (wish) {
+    e.preventDefault(); e.stopPropagation();
+    const appid = +wish.dataset.wish, on = !wish.classList.contains('on');
+    wish.disabled = true;
+    try {
+      await host.call('wish', { appid, on });
+      for (const it of items.values()) { for (const a of [it.release, it.app]) if (a && a.appid === appid) a.wish = on; }
+      for (const b of document.querySelectorAll(`[data-wish="${appid}"]`)) { b.classList.toggle('on', on); b.textContent = on ? '✓ 已在愿望单' : '＋ 愿望单'; }
+      toast(on ? '已加入愿望单' : '已移出愿望单');
+    } catch (err) { toast(errText(err), 4000); }
+    wish.disabled = false;
+    return;
+  }
+  const menuBtn = t.closest('[data-menu]');
+  if (menuBtn) { e.preventDefault(); openMenu(menuBtn.closest('.post')); return; }
+  const blk = t.closest('[data-block]');
+  if (blk) { e.preventDefault(); doBlock(blk.closest('.post'), +blk.dataset.block); return; }
+  if (!t.closest('.menu')) closeMenus();
+  const trb = t.closest('[data-tr]');
+  if (trb) { e.preventDefault(); const p = trb.closest('.post'); if (p) clickTr(p); return; }
+  const ctr = t.closest('[data-ctr]');
+  if (ctr) { e.preventDefault(); const p = ctr.closest('.post'); if (p) translateComments(p.dataset.key, false); return; }
+  const cmore = t.closest('[data-cmore]');
+  if (cmore) { e.preventDefault(); const p = cmore.closest('.post'); if (p) loadComments(p.dataset.key, true); return; }
+  const open = t.closest('[data-open]');
+  if (open) { e.preventDefault(); host.call('open', { url: open.dataset.open }); return; }
+  const a = t.closest('a[href]');
+  if (a) { e.preventDefault(); const u = safeUrl(a.getAttribute('href')); if (u) host.call('open', { url: u }); return; }
+  // 点文章本身：展开 / 收起（展开后点正文、评论不收起，方便看和选字）
+  const post = t.closest('.post.ev');
+  if (!post || t.closest('button, video, .appcard, .menu, .cmts, summary, details')) { if (!t.closest('[data-toggle]') || !post) return; }
+  if (String(window.getSelection() || '').trim()) return;
+  if (post.classList.contains('open') && !t.closest('[data-toggle]') && t.closest('.body, .foot')) return;
+  toggleBody(post);
+});
+for (const b of document.querySelectorAll('#filters button')) b.onclick = () => { if (current && current.filter === b.dataset.f) { $('#main').scrollTop = 0; return; } openFilter(b.dataset.f); };
+$('#refresh').onclick = () => host.call('refresh').catch(e => toast(errText(e)));
+$('#allread').onclick = markAllRead;
+$('#jump').onclick = () => { if (current.filter !== 'all') openFilter('all'); const d = $('#divider'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+$('#totop').onclick = goTop;
+$('#newpill').onclick = () => reload(false);
+$('#main').addEventListener('scroll', () => { updateTop(); clearTimeout(posTimer); posTimer = setTimeout(savePosition, 400); if ($('#main').scrollTop < 80 && $('#newpill').classList.contains('on')) reload(true); }, { passive: true });
+
+// ---------- 启动 ----------
+(async () => {
+  try { const st = await host.call('loadState'); if (st && typeof st === 'object') S = Object.assign(S, st); } catch (e) { log('loadState: ' + errText(e)); }
+  S.seen = S.seen || {};
+  divAt = S.divAt != null ? S.divAt : (S.readUpTo || 0);
+  try { status = await host.call('status'); } catch (e) {}
+  renderStatus();
+  openFilter(S.filter === 'release' ? 'release' : 'all');
+})();
+chrome.webview.postMessage({ method: 'ready' });
+</script>
+</body>
+</html>
