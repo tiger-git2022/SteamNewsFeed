@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-11-11
+
+### 修改
+- 中文新闻配了一句英文摘要（比如「XX OUT NOW from XX!」）时，不显示这句英文，改显示正文开头。
+
 ## [1.0.2] - 2026-11-11
 
 ### 新增
