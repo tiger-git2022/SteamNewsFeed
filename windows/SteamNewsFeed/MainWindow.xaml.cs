@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -48,9 +49,45 @@ public partial class MainWindow : FluentWindow
 
 	private int _unread;
 
+	private BitmapFrame[] _iconFrames = new BitmapFrame[0];
+
+	/// <summary>
+	/// 窗口 / 任务栏图标用多尺寸的 app.ico（Windows 按需要的大小挑一档），标题栏的小图标按屏幕缩放挑最接近的一档，
+	/// 不把 256 像素的大图缩小显示（那样会糊）。
+	/// </summary>
+	private void LoadIcons()
+	{
+		try
+		{
+			using Stream s = typeof(MainWindow).Assembly.GetManifestResourceStream("SteamNewsFeed.app.ico");
+			var decoder = new IconBitmapDecoder(s, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+			_iconFrames = decoder.Frames.OrderBy(f => f.PixelWidth).ToArray();
+			Icon = decoder.Frames[0];
+			UpdateTitleIcon();
+			DpiChanged += delegate { UpdateTitleIcon(); };
+			Loaded += delegate { UpdateTitleIcon(); };
+		}
+		catch (Exception ex)
+		{
+			Logger.Log("读取图标失败：" + ex.Message);
+		}
+	}
+
+	private void UpdateTitleIcon()
+	{
+		if (_iconFrames.Length == 0)
+		{
+			return;
+		}
+		double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+		int want = (int)Math.Ceiling(16 * scale);
+		TitleIcon.Source = _iconFrames.FirstOrDefault(f => f.PixelWidth >= want) ?? _iconFrames[_iconFrames.Length - 1];
+	}
+
 	public MainWindow()
 	{
 		InitializeComponent();
+		LoadIcons();
 		_pages = new FrameworkElement[] { PageFeed, PageSettings };
 		_feed = new FeedView(this);
 		PageFeed.Child = _feed;
