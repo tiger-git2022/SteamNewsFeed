@@ -371,7 +371,7 @@ function statsHtml(it) {
 }
 function eventPost(it) {
   const img = it.image || firstImage(it.body) || (it.release && it.release.capsule) || '';
-  const sum = it.summary || plain(it.body);
+  const sum = summaryOf(it);
   const meta = `${when(it.t)} · ${esc(it.type)}${it.fromGamePage ? ' · 来自游戏页面' : ''}${alsoHtml(it)}`;
   const wish = wishButton(it.release || it.app), stats = statsHtml(it);
   return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
@@ -401,6 +401,19 @@ function releasePost(it) {
     ${a.short ? `<div class="desc">${esc(a.short)}</div>` : ''}
     ${wishButton(a) ? `<div class="foot">${wishButton(a)}</div>` : ''}
   </article>`;
+}
+// 摘要：发行商单独填的摘要常常只有一句英文（比如中文新闻配「XX OUT NOW from XX!」），
+// 标题是中文、摘要却不是中文时，改用正文开头
+function looksChinese(t) {
+  t = String(t || '');
+  const han = (t.match(/[㐀-鿿]/g) || []).length, kana = (t.match(/[぀-ヿ]/g) || []).length;
+  const latin = (t.match(/[A-Za-z]{2,}/g) || []).length;
+  return han >= 4 && kana <= han * 0.15 && latin * 2 <= han;
+}
+function summaryOf(it) {
+  const s = String(it.summary || '').trim(), b = plain(it.body);
+  if (s && b && looksChinese(it.title) && !looksChinese(s) && looksChinese(b)) return b;
+  return s || b;
 }
 function postHtml(it) { return it.kind === 'release' ? releasePost(it) : eventPost(it); }
 
@@ -669,7 +682,7 @@ function paintTr(key) {
   if (!it || !post) return;
   const title = post.querySelector('.title'); if (title) title.textContent = trTitle(it);
   const note = post.querySelector('.trnote'); if (note) { const n = trNote(it); note.innerHTML = n; note.hidden = !n; note.classList.toggle('err', !!(trState.get(key) || {}).error); }
-  const sum = post.querySelector('.summary'); if (sum) sum.textContent = trSummary(it, it.summary || plain(it.body));
+  const sum = post.querySelector('.summary'); if (sum) sum.textContent = trSummary(it, summaryOf(it));
   const btn = post.querySelector('.trb'); if (btn) btn.classList.toggle('on', trShown(it));
   const body = post.querySelector('.body');
   if (body && !body.hidden) {
