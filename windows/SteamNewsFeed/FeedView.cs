@@ -37,7 +37,8 @@ public sealed class FeedView : Grid
 	public FeedView(MainWindow main)
 	{
 		_main = main;
-		_web = new WebView2 { Visibility = Visibility.Hidden };
+		// 右边和下边留几像素给窗口自己：WebView2 是单独的子窗口，会把鼠标抢走，贴边的话窗口右边、下边就拖不动改大小了
+		_web = new WebView2 { Visibility = Visibility.Hidden, Margin = new Thickness(0, 0, 6, 6) };
 		_message = new TextBlock
 		{
 			Text = "正在加载…",

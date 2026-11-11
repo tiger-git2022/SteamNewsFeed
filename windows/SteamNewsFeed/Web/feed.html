@@ -146,6 +146,11 @@ button.wish.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45
 .tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .tags span { background: var(--chip); color: var(--fg2); font-size: 11px; padding: 1px 6px; border-radius: 3px; }
 .appcard .adate { color: var(--fg3); font-size: 12px; }
+/* 评测：颜色和 Steam 一样（好评蓝、褒贬不一黄、差评橙） */
+.appcard .rev { font-size: 12.5px; color: var(--fg2); }
+.appcard .rev b { font-weight: 600; margin-right: 6px; }
+.rev.pos b { color: #66c0f4; } .rev.mix b { color: #b9a074; } .rev.neg b { color: #c35c2c; } .rev.none b { color: var(--fg3); }
+:root.light .rev.pos b { color: #1a7bc4; } :root.light .rev.mix b { color: #8a6d1f; } :root.light .rev.neg b { color: #b0441a; }
 .price { margin-top: auto; align-self: flex-end; display: flex; align-items: stretch; border-radius: 3px; overflow: hidden; font-size: 13px; }
 .price > * { display: flex; align-items: center; padding: 2px 8px; }
 .price .newtag { background: #4a7fd0; color: #fff; font-size: 12px; }
@@ -318,6 +323,13 @@ function priceHtml(app) {
   h += `<span class="amt">${p.pct > 0 && p.original ? `<span class="orig">${esc(p.original)}</span>` : ''}<span>${esc(p.final)}</span>${p.cny != null ? `<span class="cny">≈ ¥${p.cny.toFixed(2)}</span>` : ''}</span>`;
   return `<div class="price">${h}</div>`;
 }
+function reviewHtml(app) {
+  const r = app.reviews; if (!r) return '';
+  if (!r.count) return '<div class="rev none"><b>暂无评测</b></div>';
+  const cls = r.score >= 6 ? 'pos' : r.score === 5 ? 'mix' : r.score >= 1 ? 'neg' : (r.pct >= 70 ? 'pos' : r.pct >= 40 ? 'mix' : 'neg');
+  const label = r.score > 0 && r.label ? r.label : '评测较少';
+  return `<div class="rev ${cls}" title="${r.count} 篇用户评测中有 ${r.pct}% 为好评"><b>${esc(label)}</b>好评率 ${r.pct}% · 好评 ${r.positive.toLocaleString()} / ${r.count.toLocaleString()} 篇</div>`;
+}
 function appCard(app) {
   return `<a class="appcard" data-open="${esc(app.url)}">
     <img class="cap" src="${esc(app.capsule || app.header)}" loading="lazy" onerror="this.style.visibility='hidden'">
@@ -326,6 +338,7 @@ function appCard(app) {
       ${app.short ? `<div class="ashort">${esc(app.short)}</div>` : ''}
       ${app.tags && app.tags.length ? `<div class="tags">${app.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       ${app.releaseTs ? `<div class="adate">${day(app.releaseTs)}</div>` : ''}
+      ${reviewHtml(app)}
       ${priceHtml(app)}
     </div></a>`;
 }
