@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
+using Microsoft.Toolkit.Uwp.Notifications;
 using Wpf.Ui.Controls;
 using Forms = System.Windows.Forms;
 
@@ -37,6 +38,8 @@ public partial class MainWindow
 			}
 		};
 		_tray.BalloonTipClicked += delegate { ShowTimeline(); };
+		// Windows 通知：弹出时点、或者之后在通知中心里点，都打开时间线（程序没开着时会启动它）
+		ToastNotificationManagerCompat.OnActivated += e => Dispatcher.BeginInvoke((Action)ShowTimeline);
 		UpdateTrayVisible();
 		Closed += delegate
 		{
@@ -107,12 +110,27 @@ public partial class MainWindow
 	/// <summary>窗口缩在托盘里时，发现新发售的游戏弹个通知。</summary>
 	private void NotifyReleases(List<string> names)
 	{
-		if (IsVisible && IsActive || !Store.Cfg.Notify || _tray == null || !_tray.Visible || names.Count == 0)
+		if (IsVisible && IsActive || !Store.Cfg.Notify || names.Count == 0)
 		{
 			return;
 		}
 		string text = names.Count == 1 ? "《" + names[0] + "》" : "《" + names[0] + "》等 " + names.Count + " 款";
-		_tray.ShowBalloonTip(6000, "关注的发行商有新游戏发售", text + "，点这里查看", Forms.ToolTipIcon.Info);
+		try
+		{
+			new ToastContentBuilder()
+				.AddArgument("action", "timeline")
+				.AddText("关注的发行商有新游戏发售")
+				.AddText(text + "，点这里查看")
+				.Show();
+		}
+		catch (Exception ex)
+		{
+			Logger.Log("系统通知发送失败，改用托盘气泡：" + ex.Message);
+			if (_tray != null && _tray.Visible)
+			{
+				_tray.ShowBalloonTip(6000, "关注的发行商有新游戏发售", text + "，点这里查看", Forms.ToolTipIcon.Info);
+			}
+		}
 	}
 
 	/// <summary>点关闭：缩到托盘。返回 true 表示已经缩到托盘（关闭要取消）。</summary>

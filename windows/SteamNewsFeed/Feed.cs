@@ -52,6 +52,9 @@ public sealed class Entry
 
 	/// <summary>去重时被合并掉了。</summary>
 	public bool Hidden;
+
+	/// <summary>新闻实际发布的时间（T 可能被挪到发现新发售的时间）。</summary>
+	public long PostedT;
 }
 
 /// <summary>
@@ -1006,6 +1009,8 @@ public static class Feed
 		lock (L)
 		{
 			var covered = new Dictionary<string, int>();
+			// 晚发现的新发售（比如刚关注的发行商最近出的游戏）：发售新闻也排到发现的时间，免得落在已读的部分
+			var coveredT = new Dictionary<string, long>();
 			foreach (ReleaseRec r in Store.St.Releases.Values)
 			{
 				if (!Store.St.Apps.TryGetValue(r.AppId, out AppRec app) || !Qualifies(app))
@@ -1015,10 +1020,12 @@ public static class Feed
 				if (r.CoveredBy != "" && Docs.ContainsKey(r.CoveredBy))
 				{
 					covered[r.CoveredBy] = r.AppId;
+					coveredT[r.CoveredBy] = r.T;
 				}
 				else if (r.EventGid != "" && Docs.ContainsKey(r.EventGid))
 				{
 					covered[r.EventGid] = r.AppId;
+					coveredT[r.EventGid] = r.T;
 				}
 				else if (r.EventGid != "")
 				{
@@ -1038,10 +1045,11 @@ public static class Feed
 				{
 					continue;
 				}
-				var en = new Entry { Key = "e:" + d.Gid, T = d.T, Gid = d.Gid, Clan = d.Clan, ReleaseApp = rel };
+				long shown = rel != 0 && coveredT.TryGetValue(d.Gid, out long rt) && rt > d.T + 6 * 3600 ? rt : d.T;
+				var en = new Entry { Key = "e:" + d.Gid, T = shown, PostedT = d.T, Gid = d.Gid, Clan = d.Clan, ReleaseApp = rel };
 				Events.TryGetValue(d.Gid, out JObject ev);
 				string k = DupKey(ev);
-				if (k != null && groups.TryGetValue(k, out Entry keep) && d.T - keep.T <= 3 * Day)
+				if (k != null && groups.TryGetValue(k, out Entry keep) && d.T - keep.PostedT <= 3 * Day)
 				{
 					if (keep.ReleaseApp == 0 && rel != 0)
 					{
@@ -1212,6 +1220,7 @@ public static class Feed
 			}
 			o["kind"] = "event";
 			o["fromGamePage"] = e.FromGamePage;
+			o["postedT"] = e.PostedT > 0 ? e.PostedT : ev.Value<long?>("rtime32_start_time") ?? e.T;
 			int clan = Steam.ClanAccount(ev.Value<string>("clan_steamid"));
 			int appid = ev.Value<int?>("appid") ?? 0;
 			JObject jd;
