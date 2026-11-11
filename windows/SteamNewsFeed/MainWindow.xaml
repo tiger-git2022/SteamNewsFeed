@@ -81,9 +81,7 @@
                     <ui:Button Style="{StaticResource NavButton}" Tag="0" Click="Nav_Click">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="News24" Margin="0,0,12,0"/><TextBlock Text="时间线"/>
-                            <Border x:Name="NavBadge" Visibility="Collapsed" Margin="8,0,0,0" Padding="6,0" CornerRadius="9" MinWidth="18" Height="18" Background="#D98F40" VerticalAlignment="Center">
-                                <local:GlyphText x:Name="NavCount" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
-                            </Border>
+                            <local:Badge x:Name="NavBadge" Visibility="Collapsed" Margin="8,0,0,0" Height="18" FontSize="11" FontWeight="SemiBold" Background="#D98F40" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
                     <ui:Button Style="{StaticResource NavButton}" Tag="1" Click="Nav_Click">

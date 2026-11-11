@@ -407,7 +407,7 @@ public partial class MainWindow : FluentWindow
 	{
 		_unread = n;
 		NavBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
-		NavCount.Text = n > 99 ? "99+" : n.ToString();
+		NavBadge.Text = n > 99 ? "99+" : n.ToString();
 		UpdateTrayText();
 		_feed.PostUnread(n);
 	}
@@ -636,7 +636,7 @@ public partial class MainWindow : FluentWindow
 		Tint.Fill = new SolidColorBrush(dark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3));
 		// 和网页里的徽标一样：深色时浅橙底黑字，浅色时深橙底白字
 		NavBadge.Background = new SolidColorBrush(dark ? Color.FromRgb(0xF0, 0xA0, 0x50) : Color.FromRgb(0xC2, 0x5E, 0x00));
-		NavCount.Foreground = dark ? new SolidColorBrush(Color.FromArgb(0xE6, 0, 0, 0)) : Brushes.White;
+		NavBadge.Foreground = dark ? new SolidColorBrush(Color.FromArgb(0xE6, 0, 0, 0)) : Brushes.White;
 		// 浅色时卡片、按钮、输入框用半透明的白（和网页一样），不然 WPF-UI 默认 70% 的白底压在亚克力上很突兀；深色用 WPF-UI 自己的
 		var lightFills = new (string Key, byte Alpha)[]
 		{
