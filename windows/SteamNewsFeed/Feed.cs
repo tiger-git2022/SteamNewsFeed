@@ -630,7 +630,7 @@ public static class Feed
 			{
 				["ids"] = new JArray(batch.Select(a => new JObject { ["appid"] = a })),
 				["context"] = new JObject { ["language"] = "schinese", ["country_code"] = country, ["steam_realm"] = 1 },
-				["data_request"] = new JObject { ["include_assets"] = true, ["include_release"] = true, ["include_tag_count"] = 8, ["include_basic_info"] = true },
+				["data_request"] = new JObject { ["include_assets"] = true, ["include_release"] = true, ["include_tag_count"] = 8, ["include_basic_info"] = true, ["include_reviews"] = true },
 			};
 			try
 			{
@@ -1354,6 +1354,20 @@ public static class Feed
 			}
 		}
 		o["makers"] = makers;
+		// 评测：已发售的才显示（等级、好评率、总数；好评数按好评率算）
+		if (it["reviews"]?["summary_filtered"] is JObject rv && o.Value<bool>("comingSoon") == false)
+		{
+			int count = rv.Value<int?>("review_count") ?? 0;
+			int pct = rv.Value<int?>("percent_positive") ?? 0;
+			o["reviews"] = new JObject
+			{
+				["count"] = count,
+				["pct"] = pct,
+				["positive"] = (int)Math.Round(count * pct / 100.0),
+				["score"] = rv.Value<int?>("review_score") ?? 0,
+				["label"] = rv.Value<string>("review_score_label") ?? "",
+			};
+		}
 		if (it["best_purchase_option"] is JObject bpo)
 		{
 			long finalCents = long.TryParse(bpo.Value<string>("final_price_in_cents"), out long f) ? f : 0;
