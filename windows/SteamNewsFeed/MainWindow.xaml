@@ -12,8 +12,7 @@
                  UseLayoutRounding="True"
                  TextOptions.TextFormattingMode="Display"
                  TextOptions.TextRenderingMode="ClearType"
-                 RenderOptions.ClearTypeHint="Enabled"
-                 Icon="pack://application:,,,/SteamNewsFeed;component/SteamNewsFeed/icon.png">
+                 RenderOptions.ClearTypeHint="Enabled">
     <ui:FluentWindow.Resources>
         <Style x:Key="NavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -55,7 +54,7 @@
 
         <ui:TitleBar Grid.Row="0" Title="Steam 新闻聚合">
             <ui:TitleBar.Icon>
-                <ui:ImageIcon Source="pack://application:,,,/SteamNewsFeed;component/SteamNewsFeed/icon.png"/>
+                <ui:ImageIcon x:Name="TitleIcon" RenderOptions.BitmapScalingMode="HighQuality"/>
             </ui:TitleBar.Icon>
         </ui:TitleBar>
 
