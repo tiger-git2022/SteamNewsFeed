@@ -44,7 +44,9 @@ a:hover { text-decoration: underline; }
 #app { display: flex; flex-direction: column; height: 100vh; }
 #top { display: flex; align-items: center; gap: 8px; padding: 14px 22px 10px; flex-shrink: 0; flex-wrap: wrap; }
 #top h2 { margin: 0 4px 0 0; font-size: 20px; font-weight: 600; }
-.count { display: inline-flex; align-items: center; justify-content: center; height: 18px; min-width: 18px; padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 1; font-weight: 600; background: var(--new); color: var(--onnew); }
+/* 未读数角标：数字由 paintCount() 画在 canvas 上，按字形实际轮廓居中（见那里的说明），这里只管底色和圆角 */
+.count { display: inline-block; vertical-align: middle; border-radius: 9px; line-height: 0; font-size: 11px; font-weight: 600; background: var(--new); color: var(--onnew); }
+.count canvas { display: block; }
 .seg { display: inline-flex; border: 1px solid var(--ctlline); border-radius: 5px; overflow: hidden; margin-left: 8px; }
 .seg button { border: 0; border-radius: 0; background: transparent; color: var(--fg2); padding: 3px 12px; }
 .seg button.on { background: var(--ctlhover); color: var(--fg); font-weight: 600; }
@@ -69,6 +71,9 @@ a:hover { text-decoration: underline; }
 .badge.rel { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
 .badge.typ { background: var(--chip); color: var(--fg2); }
 .post.ev { cursor: pointer; }
+/* 生成的发售卡片没有正文可展开：标题、封面点了没反应，只有游戏卡片打开商店页 */
+.post.rel .title, .post.rel .cover { cursor: default; }
+.post.rel .title:hover { color: inherit; }
 .post.ev.open { cursor: default; }
 .post.ev.open .title, .post.ev.open .cover { cursor: pointer; }
 .tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-right: -6px; }
@@ -232,7 +237,69 @@ chrome.webview.addEventListener('message', e => {
 function applyTheme(theme, accent) {
   document.documentElement.classList.toggle('light', theme === 'light');
   if (accent) document.documentElement.style.setProperty('--accent', accent);
+  repaintCounts();
 }
+
+// ---------- 未读数角标 ----------
+// 按行高排版时，数字在角标里落在哪由字体的上下留白决定（不对称），屏幕缩放下还会遇到奇偶问题：
+// 比如 150% 时 18px 高的角标是 27 个物理像素、数字字形 12 个，上下留白只能一边 7 一边 8，基线再被对齐到整像素就更歪。
+// 这里和 WPF 那边的 GlyphText 一样按字形实际轮廓居中：在物理像素的画布上先画一遍、读回像素量出真实的墨迹边界，
+// 画布高度按墨迹高度的奇偶选（这样上下留白才能相等），再把墨迹移到正中重画（水平方向量一次修一次，最多三次）。
+function inkBox(ctx, W, H) {
+  const d = ctx.getImageData(0, 0, W, H).data;
+  let x0 = W, x1 = -1, y0 = H, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return null;
+  // 边上那一行 / 列只盖住了一部分：按覆盖度算到小数
+  const rowMax = y => { let m = 0; for (let x = 0; x < W; x++) m = Math.max(m, d[(y * W + x) * 4 + 3]); return m / 255; };
+  const colMax = x => { let m = 0; for (let y = 0; y < H; y++) m = Math.max(m, d[(y * W + x) * 4 + 3]); return m / 255; };
+  return { top: y0 + 1 - rowMax(y0), bottom: y1 + rowMax(y1), left: x0 + 1 - colMax(x0), right: x1 + colMax(x1) };
+}
+function paintCount(el, text) {
+  el.dataset.text = text;
+  el.setAttribute('aria-label', text);
+  let cv = el.querySelector('canvas');
+  if (!cv) { el.textContent = ''; cv = document.createElement('canvas'); el.appendChild(cv); }
+  const cs = getComputedStyle(el), dpr = window.devicePixelRatio || 1;
+  const font = `${cs.fontWeight} ${parseFloat(cs.fontSize) * dpr}px ${cs.fontFamily}`;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.font = font;
+  const m = ctx.measureText(text);
+  // 第一遍：画在一块足够大的画布上，量出真实墨迹
+  const pad = Math.ceil(4 * dpr);
+  const fw = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + 2 * pad, fh = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) + 2 * pad;
+  cv.width = fw; cv.height = fh;
+  ctx.font = font;
+  ctx.fillText(text, pad + m.actualBoundingBoxLeft, pad + m.actualBoundingBoxAscent);
+  const ink = inkBox(ctx, fw, fh);
+  if (!ink) return;
+  const iw = ink.right - ink.left, ih = ink.bottom - ink.top;
+  // 角标高 18px、左右各留 6px（单个数字时是圆形）；文字会被对齐到整像素行，所以高度和墨迹高度要同奇偶
+  let H = Math.round(18 * dpr);
+  if ((H - Math.round(ih)) % 2) H += 1;
+  const W = Math.max(H, Math.round(iw + 12 * dpr));
+  let x = pad + m.actualBoundingBoxLeft + (W - iw) / 2 - ink.left, y = pad + m.actualBoundingBoxAscent + (H - ih) / 2 - ink.top;
+  cv.width = W; cv.height = H;
+  cv.style.width = W / dpr + 'px'; cv.style.height = H / dpr + 'px';
+  for (let i = 0; i < 3; i++) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = font;
+    ctx.fillStyle = '#000';
+    ctx.fillText(text, x, y);
+    const r = inkBox(ctx, W, H);
+    const dx = ((W - r.right) - r.left) / 2, dy = ((H - r.bottom) - r.top) / 2;
+    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) break;
+    x += dx; y += dy;
+  }
+  // 位置定好后用真正的颜色画
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = font;
+  ctx.fillStyle = cs.color;
+  ctx.fillText(text, x, y);
+}
+function repaintCounts() { for (const el of document.querySelectorAll('.count[data-text]')) if (!el.hidden) paintCount(el, el.dataset.text); }
+// 拖到另一块缩放比例不同的屏幕上：重画
+(function watchDpr() { matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change', () => { repaintCounts(); watchDpr(); }, { once: true }); })();
 { const q = new URLSearchParams(location.search); applyTheme(q.get('theme'), q.get('accent')); }
 
 // ---------- 状态 ----------
@@ -372,7 +439,7 @@ function statsHtml(it) {
 function eventPost(it) {
   const img = it.image || firstImage(it.body) || (it.release && it.release.capsule) || '';
   const sum = summaryOf(it);
-  const meta = `${when(it.t)} · ${esc(it.type)}${it.fromGamePage ? ' · 来自游戏页面' : ''}${alsoHtml(it)}`;
+  const meta = `${when(it.postedT || it.t)} · ${esc(it.type)}${it.fromGamePage ? ' · 来自游戏页面' : ''}${alsoHtml(it)}`;
   const wish = wishButton(it.release || it.app), stats = statsHtml(it);
   return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
     ${sourceHtml(it, meta)}
@@ -392,10 +459,10 @@ function releasePost(it) {
   let notice = `《${esc(a.name)}》${a.type === 0 ? '正式发售啦！' : '现已推出！'}`;
   if (p && p.pct > 0) notice += `为庆祝发售，现在购买可享 ${p.pct}% 优惠${p.end ? `（到 ${shortDay(p.end)}）` : ''}哦！`;
   const meta = `${when(it.t)} · 新发售`;
-  return `<article class="post${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}">
+  return `<article class="post rel${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}">
     ${sourceHtml(it, meta)}
-    <h3 class="title" data-open="${esc(a.url)}">《${esc(a.name)}》 – ${a.type === 0 ? '现已正式发售！' : '现已推出！'}</h3>
-    ${a.capsule ? `<img class="cover" src="${esc(a.capsule)}" loading="lazy" data-open="${esc(a.url)}" onerror="this.remove()">` : ''}
+    <h3 class="title">《${esc(a.name)}》 – ${a.type === 0 ? '现已正式发售！' : '现已推出！'}</h3>
+    ${a.capsule ? `<img class="cover" src="${esc(a.capsule)}" loading="lazy" onerror="this.remove()">` : ''}
     <div class="notice">${notice}</div>
     ${appCard(a)}
     ${a.short ? `<div class="desc">${esc(a.short)}</div>` : ''}
@@ -849,7 +916,7 @@ function onEvent(d) {
     case 'status': setStatus(d.status); break;
     case 'theme': applyTheme(d.theme, d.accent); break;
     case 'tr': onTrStream(d); break;
-    case 'unread': { const u = $('#unread'); u.hidden = !d.n; u.textContent = d.n > 99 ? '99+' : d.n; break; }
+    case 'unread': { const u = $('#unread'); u.hidden = !d.n; if (d.n) paintCount(u, d.n > 99 ? '99+' : String(d.n)); break; }
     case 'updated':
       // 手动刷新：分界线先隐藏，下次离开时再记（自动定时刷新不动它）
       if (d.manual) { divAt = S.divAt = 0; placeDivider(); updateButtons(); save(); }
