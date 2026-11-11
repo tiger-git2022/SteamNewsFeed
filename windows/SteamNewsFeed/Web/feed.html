@@ -165,6 +165,9 @@ button.wish.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45
 
 #totop { position: fixed; right: 30px; bottom: 26px; width: 40px; height: 40px; border-radius: 20px; padding: 0; font-size: 18px; opacity: 0; pointer-events: none; transition: opacity .15s; background: var(--solid); box-shadow: 0 4px 12px var(--shadow); }
 #totop.on { opacity: 1; pointer-events: auto; }
+#totop svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; margin: auto; }
+#totop.busy svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 #newpill { position: fixed; left: 50%; transform: translateX(-50%); top: 70px; z-index: 5; display: none; background: var(--accent); color: #000; border: 0; border-radius: 16px; padding: 5px 16px; box-shadow: 0 4px 12px var(--shadow); }
 :root.light #newpill { color: #fff; }
 #newpill.on { display: block; }
@@ -189,7 +192,7 @@ button.wish.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45
   <div id="main"><div id="list"></div></div>
 </div>
 <button id="newpill">有新内容，点击查看</button>
-<button id="totop" title="回到顶部（同时全部记为已读）">↑</button>
+<button id="totop"></button>
 <div id="toast"></div>
 <script>
 'use strict';
@@ -520,15 +523,14 @@ function updateButtons() {
   $('#jump').disabled = !(v && v.filter === 'all' && d > 0 && d < all.keys.length);
   $('#allread').disabled = !(all && all.keys.length && (b > 0 || Object.keys(S.seen).length));
 }
+// 看过：这条在屏幕上出现过、之后往下滚把它整个滚出了屏幕顶部，才算看过（还在屏幕上的「新」标签一直留着）
 const seenObserver = new IntersectionObserver(entries => {
-  const rootH = $('#main').clientHeight;
   for (const e of entries) {
     const el = e.target;
-    const enough = e.isIntersecting && (e.intersectionRatio >= 0.5 || e.intersectionRect.height >= rootH * 0.45);
-    if (enough) { if (!el._t) el._t = setTimeout(() => { el._t = 0; markSeen(el.dataset.key); }, 700); }
-    else { clearTimeout(el._t); el._t = 0; }
+    if (e.isIntersecting) { el._vis = true; continue; }
+    if (el._vis && e.rootBounds && e.boundingClientRect.bottom <= e.rootBounds.top + 1) markSeen(el.dataset.key);
   }
-}, { root: document.getElementById('main'), threshold: [0, 0.25, 0.5, 0.75, 1] });
+}, { root: document.getElementById('main'), threshold: [0] });
 const moreObserver = new IntersectionObserver(entries => { for (const e of entries) if (e.isIntersecting && current) loadMore(current); }, { root: document.getElementById('main'), rootMargin: '800px 0px' });
 // ---------- 评论 ----------
 // 有评论的新闻，滚到附近时读最新的几条直接显示；「查看更多」再往下读。读过的记在 cmtCache 里，重新渲染不再读。
@@ -781,7 +783,19 @@ function goTop() {
   main.scrollTop = 0;
   updateTop();
 }
-function updateTop() { $('#totop').classList.toggle('on', $('#main').scrollTop > 600); }
+// 右下角的圆按钮：在顶部时是「刷新」，往下滚了是「回到顶部」
+const REFRESH_SVG = '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>';
+function updateTop() {
+  const b = $('#totop'), atTop = $('#main').scrollTop < 80, mode = atTop ? 'refresh' : 'top';
+  if (b.dataset.mode !== mode) {
+    b.dataset.mode = mode;
+    b.innerHTML = atTop ? REFRESH_SVG : '↑';
+    b.title = atTop ? '刷新' : '回到顶部（同时全部记为已读）';
+  }
+  b.classList.toggle('on', !!status.loggedIn);
+  b.classList.toggle('busy', atTop && !!status.refreshing);
+  b.disabled = atTop && !!status.refreshing;
+}
 
 // ---------- 状态栏 ----------
 function renderStatus() {
@@ -792,6 +806,7 @@ function renderStatus() {
     : status.lastRefresh ? '上次刷新 ' + when(status.lastRefresh) + (status.followed ? ` · 关注了 ${status.followed} 个发行商 / 鉴赏家` : '') : '';
   $('#refresh').disabled = !!status.refreshing || !status.loggedIn;
   $('#refresh').textContent = status.refreshing ? '刷新中…' : '刷新';
+  updateTop();
 }
 function setStatus(st) {
   const wasReady = status.ready, wasLogged = status.loggedIn, wasTr = status.tr + '|' + status.autoTr + '|' + status.trTo;
@@ -866,7 +881,7 @@ for (const b of document.querySelectorAll('#filters button')) b.onclick = () => 
 $('#refresh').onclick = () => host.call('refresh').catch(e => toast(errText(e)));
 $('#allread').onclick = markAllRead;
 $('#jump').onclick = () => { if (current.filter !== 'all') openFilter('all'); const d = $('#divider'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
-$('#totop').onclick = goTop;
+$('#totop').onclick = () => { if ($('#totop').dataset.mode === 'refresh') host.call('refresh').catch(e => toast(errText(e))); else goTop(); };
 $('#newpill').onclick = () => reload(false);
 $('#main').addEventListener('scroll', () => { updateTop(); clearTimeout(posTimer); posTimer = setTimeout(savePosition, 400); if ($('#main').scrollTop < 80 && $('#newpill').classList.contains('on')) reload(true); }, { passive: true });
 
