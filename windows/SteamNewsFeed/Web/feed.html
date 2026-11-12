@@ -100,9 +100,14 @@ button.tg svg { width: 12px; height: 12px; fill: none; stroke: currentColor; str
 .icon.trb.on { color: var(--accent); }
 .trnote { color: var(--fg3); font-size: 12px; margin: -6px 0 8px; }
 .trnote.err { color: var(--danger); }
-.trnote .dot { display: inline-block; width: 6px; height: 6px; border-radius: 3px; background: var(--accent); margin-right: 6px; vertical-align: middle; animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: .2; } }
-.cmts .chead a { margin-left: 6px; font-size: 12px; }
+.trnote.busy { color: var(--fg2); }
+/* 翻译的加载指示：转圈的是正在翻译，灰色慢转的是排队等着 */
+.spin { display: inline-block; width: 12px; height: 12px; box-sizing: border-box; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin-right: 6px; vertical-align: -2px; animation: spin .8s linear infinite; }
+.spin.wait { border-top-color: var(--fg3); animation-duration: 2.4s; }
+.icon.trb.busy { color: var(--accent); animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.cmt .cpend { color: var(--fg3); font-size: 12px; margin-top: 3px; }
+.cmts .chead a, .cmts .chead .trwait { margin-left: 6px; font-size: 12px; }
 /* 评论 */
 .cmts { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; cursor: default; }
 .cmts .chead { color: var(--fg3); font-size: 12px; margin-bottom: 4px; }
@@ -403,7 +408,7 @@ function sourceHtml(it, extra) {
     ${isNewItem(it) ? '<span class="badge new">新</span>' : ''}
     ${it.release ? `<span class="badge rel">新发售${it.release.type !== 0 ? ' · ' + esc(it.release.typeName) : ''}</span>` : ''}
     <div class="tools">
-      ${status.tr && it.kind !== 'release' && it.gid ? `<button class="icon trb${trShown(it) ? ' on' : ''}" data-tr title="翻译 / 显示原文">译</button>` : ''}
+      ${status.tr && it.kind !== 'release' && it.gid ? `<button class="icon trb${trShown(it) ? ' on' : ''}${(trState.get(it.key) || {}).busy ? ' busy' : ''}" data-tr title="翻译 / 显示原文">译</button>` : ''}
       ${openUrl ? `<button class="icon" data-open="${esc(openUrl)}" title="在浏览器中打开（Steam）">${STEAM_SVG}</button>` : ''}
       ${it.block && it.block.length ? `<button class="icon" data-menu title="屏蔽…"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>` : ''}
     </div>
@@ -427,7 +432,7 @@ function eventPost(it) {
   return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
     ${sourceHtml(it, meta)}
     <h3 class="title" data-toggle>${esc(trTitle(it))}</h3>
-    <div class="trnote"${trNote(it) ? '' : ' hidden'}>${trNote(it)}</div>
+    <div class="trnote${(trState.get(it.key) || {}).busy ? ' busy' : ''}"${trNote(it) ? '' : ' hidden'}>${trNote(it)}</div>
     ${img ? `<img class="cover" src="${esc(img)}" loading="lazy" data-toggle onerror="this.remove()">` : ''}
     <div class="summary">${esc(trSummary(it, sum))}</div>
     <div class="body" hidden></div>
@@ -628,7 +633,7 @@ function commentsInner(it) {
   const total = Math.max(c.total, c.list.length);
   let link = '';
   if (status.tr && c.list.length && !c.loading) {
-    if (c.trLoading) link = '<a>正在翻译…</a>';
+    if (c.trLoading) link = `<span class="trwait"><span class="spin"></span>正在翻译 ${c.list.filter(x => x.trPending).length} 条评论…</span>`;
     else if (c.list.some(x => x.tr)) link = `<a data-ctr>${c.trOn ? '显示原文' : '显示译文'}</a>`;
     else if (c.list.some(x => needsTr(htmlText(x.html)))) link = '<a data-ctr>翻译评论</a>';
   }
@@ -642,7 +647,7 @@ function commentsInner(it) {
 function cmtHtml(c, trOn) {
   return `<div class="cmt">${c.avatar ? `<img class="cav" src="${esc(c.avatar)}" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="cav"></div>'}
     <div class="cbody"><div class="cwho">${c.url ? `<b><a data-open="${esc(c.url)}" style="color:inherit">${esc(c.name)}</a></b>` : `<b>${esc(c.name)}</b>`}${c.t ? when(c.t) : ''}</div>
-    <div class="ctext">${trOn && c.tr ? esc(c.tr).replace(/\n/g, '<br>') : c.html}</div></div></div>`;
+    <div class="ctext">${trOn && c.tr ? esc(c.tr).replace(/\n/g, '<br>') : c.html}</div>${c.trPending ? '<div class="cpend"><span class="spin"></span>等待翻译</div>' : ''}</div></div>`;
 }
 // Steam 渲染好的评论 HTML → 只留文字、换行、链接、引用（不直接插 Steam 的 HTML）
 function cleanCommentNode(node) {
@@ -726,7 +731,11 @@ function trSummary(it, sum) {
 function trNote(it) {
   const s = trState.get(it.key); if (!s) return '';
   if (s.error) return `翻译失败：${esc(s.error)} · <a data-tr>重试</a>`;
-  if (s.busy) return '<span class="dot"></span>正在翻译…';
+  if (s.busy && s.queued) {
+    const ahead = trQueue.findIndex(q => q.key === it.key);
+    return `<span class="spin wait"></span>排队等待翻译${ahead > 0 ? `（前面还有 ${ahead} 条）` : '…'}`;
+  }
+  if (s.busy) return `<span class="spin"></span>${s.raw ? '正在翻译，译文陆续显示…' : '正在翻译…'}`;
   if (s.done) return s.orig ? '🌐 显示的是原文 · <a data-tr>显示译文</a>' : '🌐 机器翻译 · <a data-tr>显示原文</a>';
   return '';
 }
@@ -742,9 +751,9 @@ function paintTr(key) {
   const it = items.get(key), post = document.querySelector(`.post[data-key="${CSS.escape(key)}"]`);
   if (!it || !post) return;
   const title = post.querySelector('.title'); if (title) title.textContent = trTitle(it);
-  const note = post.querySelector('.trnote'); if (note) { const n = trNote(it); note.innerHTML = n; note.hidden = !n; note.classList.toggle('err', !!(trState.get(key) || {}).error); }
+  const note = post.querySelector('.trnote'); if (note) { const n = trNote(it); note.innerHTML = n; note.hidden = !n; note.classList.toggle('err', !!(trState.get(key) || {}).error); note.classList.toggle('busy', !!(trState.get(key) || {}).busy); }
   const sum = post.querySelector('.summary'); if (sum) sum.textContent = trSummary(it, summaryOf(it));
-  const btn = post.querySelector('.trb'); if (btn) btn.classList.toggle('on', trShown(it));
+  const btn = post.querySelector('.trb'); if (btn) { btn.classList.toggle('on', trShown(it)); btn.classList.toggle('busy', !!(trState.get(key) || {}).busy); }
   const body = post.querySelector('.body');
   if (body && !body.hidden) {
     cancelAnimationFrame(paintTr.raf);
@@ -755,7 +764,7 @@ function queueTr(key, force) {
   const it = items.get(key); if (!it || !it.gid) return;
   let s = trState.get(key);
   if (s && (s.busy || (s.done && !force))) return;
-  s = { busy: true, done: false, error: null, raw: '', title: '', summary: '', body: '', orig: false };
+  s = { busy: true, queued: true, done: false, error: null, raw: '', title: '', summary: '', body: '', orig: false };
   trState.set(key, s); paintTr(key);
   trQueue.push({ key, force }); pumpTr();
 }
@@ -763,6 +772,8 @@ async function pumpTr() {
   while (trRunning < 2 && trQueue.length) {
     const { key, force } = trQueue.shift();
     const it = items.get(key), s = trState.get(key); if (!it || !s) continue;
+    s.queued = false; paintTr(key);
+    for (const q of trQueue) paintTr(q.key);   // 排在后面的「前面还有几条」跟着变
     trRunning++;
     const req = trSeq++; trReq.set(req, key);
     host.call('translate', { req, gid: it.gid, title: it.title, summary: it.summary || '', body: it.body || '', force: !!force })
@@ -785,12 +796,13 @@ async function translateComments(key, auto) {
   const c = cmtCache.get(key); if (!c || c.trLoading) return;
   const todo = c.list.filter(x => !x.tr && needsTr(htmlText(x.html)));
   if (!todo.length) { if (!auto && c.list.some(x => x.tr)) { c.trOn = !c.trOn; paintComments(key); } return; }
-  c.trLoading = true; c.trError = null; paintComments(key);
+  c.trLoading = true; c.trError = null; todo.forEach(x => { x.trPending = true; }); paintComments(key);
   try {
     const r = await host.call('translateTexts', { texts: todo.map(x => htmlText(x.html)) });
     todo.forEach((x, i) => { if (r[i]) x.tr = r[i]; });
     c.trOn = true;
   } catch (e) { c.trError = errText(e); }
+  todo.forEach(x => { x.trPending = false; });
   c.trLoading = false; paintComments(key);
 }
 const trObserver = new IntersectionObserver(entries => {
