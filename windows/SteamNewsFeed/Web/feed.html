@@ -635,9 +635,9 @@ function commentsInner(it) {
   if (status.tr && c.list.length && !c.loading) {
     if (c.trLoading) link = `<span class="trwait"><span class="spin"></span>正在翻译 ${c.list.filter(x => x.trPending).length} 条评论…</span>`;
     else if (c.list.some(x => x.tr)) link = `<a data-ctr>${c.trOn ? '显示原文' : '显示译文'}</a>`;
-    else if (c.list.some(x => needsTr(htmlText(x.html)))) link = '<a data-ctr>翻译评论</a>';
+    else if (!c.trError && c.list.some(x => needsTr(htmlText(x.html)))) link = '<a data-ctr>翻译评论</a>';
+    if (c.trError && !c.trLoading) link += ` <span class="cerr">翻译失败：${esc(c.trError)} · <a data-cretry>重试</a></span>`;
   }
-  if (c.trError) link += ` <span class="cerr">翻译失败：${esc(c.trError)}</span>`;
   let h = `<div class="chead">💬 ${total} 条评论${link}</div>` + c.list.map(x => cmtHtml(x, c.trOn)).join('');
   if (c.loading) h += `<div class="cerr">正在读取…</div>`;
   else if (c.error) h += `<div class="cerr">${esc(c.error)} <a data-cmore>重试</a></div>`;
@@ -736,7 +736,7 @@ function trNote(it) {
     return `<span class="spin wait"></span>排队等待翻译${ahead > 0 ? `（前面还有 ${ahead} 条）` : '…'}`;
   }
   if (s.busy) return `<span class="spin"></span>${s.raw ? '正在翻译，译文陆续显示…' : '正在翻译…'}`;
-  if (s.done) return s.orig ? '🌐 显示的是原文 · <a data-tr>显示译文</a>' : '🌐 机器翻译 · <a data-tr>显示原文</a>';
+  if (s.done) return (s.orig ? '🌐 显示的是原文 · <a data-tr>显示译文</a>' : '🌐 机器翻译 · <a data-tr>显示原文</a>') + ' · <a data-retr>重新翻译</a>';
   return '';
 }
 function splitTr(raw) {
@@ -777,7 +777,10 @@ async function pumpTr() {
     trRunning++;
     const req = trSeq++; trReq.set(req, key);
     host.call('translate', { req, gid: it.gid, title: it.title, summary: it.summary || '', body: it.body || '', force: !!force })
-      .then(r => { Object.assign(s, { title: r.title || '', summary: r.summary || '', body: r.body || '', done: true }); })
+      .then(r => {
+        if (!(r.title || r.summary || r.body)) s.error = '没有返回译文';
+        else Object.assign(s, { title: r.title || '', summary: r.summary || '', body: r.body || '', done: true });
+      })
       .catch(e => { s.error = errText(e); })
       .finally(() => { s.busy = false; trReq.delete(req); trRunning--; paintTr(key); pumpTr(); });
   }
@@ -792,15 +795,19 @@ function clickTr(post) {
   if (s && s.busy) return;
   queueTr(key, !!(s && s.error));
 }
-async function translateComments(key, auto) {
+// retry：只把还没翻出来的那些再翻一次；否则已经有译文时点链接是在原文 / 译文之间切换
+async function translateComments(key, auto, retry) {
   const c = cmtCache.get(key); if (!c || c.trLoading) return;
   const todo = c.list.filter(x => !x.tr && needsTr(htmlText(x.html)));
-  if (!todo.length) { if (!auto && c.list.some(x => x.tr)) { c.trOn = !c.trOn; paintComments(key); } return; }
+  const has = c.list.some(x => x.tr);
+  if (!todo.length || (!auto && !retry && has)) { if (!auto && has) { c.trOn = !c.trOn; paintComments(key); } return; }
   c.trLoading = true; c.trError = null; todo.forEach(x => { x.trPending = true; }); paintComments(key);
   try {
     const r = await host.call('translateTexts', { texts: todo.map(x => htmlText(x.html)) });
     todo.forEach((x, i) => { if (r[i]) x.tr = r[i]; });
     c.trOn = true;
+    const miss = todo.filter(x => !x.tr).length;
+    if (miss) c.trError = miss === todo.length ? '没有返回译文' : `有 ${miss} 条没翻译出来`;
   } catch (e) { c.trError = errText(e); }
   todo.forEach(x => { x.trPending = false; });
   c.trLoading = false; paintComments(key);
@@ -962,6 +969,10 @@ document.addEventListener('click', async e => {
   if (!t.closest('.menu')) closeMenus();
   const trb = t.closest('[data-tr]');
   if (trb) { e.preventDefault(); const p = trb.closest('.post'); if (p) clickTr(p); return; }
+  const retr = t.closest('[data-retr]');
+  if (retr) { e.preventDefault(); const p = retr.closest('.post'); if (p) queueTr(p.dataset.key, true); return; }
+  const cretry = t.closest('[data-cretry]');
+  if (cretry) { e.preventDefault(); const p = cretry.closest('.post'); if (p) translateComments(p.dataset.key, false, true); return; }
   const ctr = t.closest('[data-ctr]');
   if (ctr) { e.preventDefault(); const p = ctr.closest('.post'); if (p) translateComments(p.dataset.key, false); return; }
   const cmore = t.closest('[data-cmore]');

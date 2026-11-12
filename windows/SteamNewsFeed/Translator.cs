@@ -121,7 +121,18 @@ public static class Translator
 		string user = "===TITLE===\n" + (title ?? "") + "\n===SUMMARY===\n" + (summary ?? "") + "\n===BODY===\n" + (body ?? "");
 		bool think = ShouldThink(c, (title ?? "") + "\n" + (summary ?? "") + "\n" + (body ?? ""));
 		string output = await RunAsync(c, system, user, think, onText).ConfigureAwait(false);
-		return SplitPost(output);
+		JObject result = SplitPost(output);
+		// 什么都没拿到时算失败（不当成译文、也不会进缓存），页面上能重试
+		if (IsEmptyTranslation(result))
+		{
+			throw new InvalidOperationException(string.IsNullOrWhiteSpace(output) ? "接口没有返回译文" : "返回的译文格式不对，没找到分隔行");
+		}
+		return result;
+	}
+
+	public static bool IsEmptyTranslation(JObject t)
+	{
+		return t == null || string.IsNullOrWhiteSpace(t.Value<string>("title")) && string.IsNullOrWhiteSpace(t.Value<string>("summary")) && string.IsNullOrWhiteSpace(t.Value<string>("body"));
 	}
 
 	public static JObject SplitPost(string output)

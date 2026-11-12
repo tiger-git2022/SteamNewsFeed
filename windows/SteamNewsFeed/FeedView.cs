@@ -315,7 +315,7 @@ public sealed class FeedView : Grid
 			lock (Store.Lock)
 			{
 				cacheKey = gid + "|" + Store.Cfg.TranslateTo;
-				if (gid != "" && a.Value<bool?>("force") != true && Store.St.Translations.TryGetValue(cacheKey, out JObject hit))
+				if (gid != "" && a.Value<bool?>("force") != true && Store.St.Translations.TryGetValue(cacheKey, out JObject hit) && !Translator.IsEmptyTranslation(hit))
 				{
 					return hit;
 				}
