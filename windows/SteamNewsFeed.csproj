@@ -51,4 +51,21 @@
   <Target Name="SingleExeOnly" AfterTargets="Build">
     <Delete Files="$(OutDir)WebView2Loader.dll;$(OutDir)$(TargetFileName).config" />
   </Target>
+  <!-- 版本号：取 CHANGELOG.md 里最上面一个标了日期的版本（本地编译和 GitHub 编译同一个来源，
+       这样本地编译出来的 exe 版本号也对，不会一直提示有更新）。也可以用 -p:AppVersion=1.2.3 指定。 -->
+  <PropertyGroup>
+    <ChangelogPath>$(MSBuildThisFileDirectory)..\CHANGELOG.md</ChangelogPath>
+    <AppVersion Condition="'$(AppVersion)' == '' And Exists('$(ChangelogPath)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(ChangelogPath)')), '(?m)^## \[(\d+\.\d+\.\d+)\] - \d{4}-').Groups[1].Value)</AppVersion>
+    <AppVersion Condition="'$(AppVersion)' == ''">0.0.0</AppVersion>
+    <VersionFile>$(BaseIntermediateOutputPath)AppVersion.g.cs</VersionFile>
+  </PropertyGroup>
+  <Target Name="WriteAppVersion" BeforeTargets="CoreCompile">
+    <WriteLinesToFile File="$(VersionFile)" Overwrite="true" WriteOnlyWhenDifferent="true" Lines="using System.Reflection%3B;[assembly: AssemblyVersion(&quot;$(AppVersion).0&quot;)];[assembly: AssemblyFileVersion(&quot;$(AppVersion).0&quot;)];[assembly: AssemblyInformationalVersion(&quot;$(AppVersion)&quot;)]" />
+  </Target>
+  <Target Name="IncludeAppVersion" BeforeTargets="CoreCompile" AfterTargets="WriteAppVersion">
+    <ItemGroup>
+      <Compile Include="$(VersionFile)" />
+      <FileWrites Include="$(VersionFile)" />
+    </ItemGroup>
+  </Target>
 </Project>
