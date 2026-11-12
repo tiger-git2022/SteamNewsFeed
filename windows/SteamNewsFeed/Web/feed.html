@@ -454,12 +454,22 @@ function releasePost(it) {
 }
 // 摘要：发行商单独填的摘要常常只有一句英文（比如中文新闻配「XX OUT NOW from XX!」），
 // 标题是中文、摘要却不是中文时，改用正文开头
-function looksChinese(t) {
-  t = String(t || '');
-  const han = (t.match(/[㐀-鿿]/g) || []).length, kana = (t.match(/[぀-ヿ]/g) || []).length;
-  const latin = (t.match(/[A-Za-z]{2,}/g) || []).length;
-  return han >= 4 && kana <= han * 0.15 && latin * 2 <= han;
+// 文字是哪种语言：按标点、斜杠、换行切成小段，含假名的段算日文、其余汉字算中文，再比多少。
+// 不按全文假名比例算：中文新闻里常夹一串日文人名（声优表之类），按比例算会把整篇当成日文。
+function scriptStats(t) {
+  t = String(t || '').replace(/https?:\/\/\S+/g, '').replace(/\[[^\]]{1,200}\]/g, ' ');
+  const st = { zh: 0, jp: 0, ko: 0, kana: 0, latin: 0 };
+  for (const seg of t.split(/[\s。！？!?，,；;：:\/／|、·•▪◆●★☆✨（）()「」『』【】《》〈〉"“”'‘’~～…—-]+/)) {
+    const han = (seg.match(/[㐀-鿿]/g) || []).length, kana = (seg.match(/[぀-ヿ]/g) || []).length;
+    if (kana) st.jp += han + kana; else st.zh += han;
+    st.kana += kana;
+    st.ko += (seg.match(/[가-힯]/g) || []).length;
+    st.latin += (seg.match(/[A-Za-zÀ-ɏЀ-ӿ]{2,}/g) || []).length;
+  }
+  return st;
 }
+function isChinese(st) { return st.zh > 0 && st.jp < st.zh && st.ko < st.zh && st.latin * 2 <= st.zh; }
+function looksChinese(t) { const st = scriptStats(t); return st.zh >= 4 && isChinese(st); }
 function summaryOf(it) {
   const s = String(it.summary || '').trim(), b = plain(it.body);
   if (s && b && looksChinese(it.title) && !looksChinese(s) && looksChinese(b)) return b;
@@ -694,22 +704,23 @@ const trQueue = [];
 function htmlText(html) { const d = document.createElement('div'); d.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n'); return d.textContent.trim(); }
 // 需不需要翻译：粗略看文字是不是已经是目标语言
 function needsTr(text) {
-  text = String(text || '').replace(/https?:\/\/\S+/g, '').replace(/\[[^\]]{1,200}\]/g, ' ');
-  const han = (text.match(/[\u3400-\u9fff]/g) || []).length, kana = (text.match(/[\u3040-\u30ff]/g) || []).length;
-  const hangul = (text.match(/[\uac00-\ud7af]/g) || []).length, latin = (text.match(/[A-Za-z\u00c0-\u024f\u0400-\u04ff]{2,}/g) || []).length;
-  const to = status.trTo || '简体中文';
-  if (han + kana + hangul + latin < 2) return false;
-  if (/中文/.test(to)) return kana > han * 0.15 || hangul > 0 || latin * 2 > han;
-  if (to === 'English') return han + kana + hangul > latin;
-  if (to === '日本語') return kana < 3;
+  const st = scriptStats(text), to = status.trTo || '简体中文';
+  if (st.zh + st.jp + st.ko + st.latin < 2) return false;
+  if (/中文/.test(to)) return !isChinese(st);
+  if (to === 'English') return st.zh + st.jp + st.ko > st.latin;
+  if (to === '日本語') return st.kana < 3;
   return true;
 }
 function trShown(it) { const s = trState.get(it.key); return !!(s && !s.orig && (s.done || s.busy) && (s.title || s.summary || s.body)); }
 function trTitle(it) { const s = trState.get(it.key); return trShown(it) && s.title ? s.title : it.title; }
 function trBody(it) { const s = trState.get(it.key); return trShown(it) && s.body ? s.body : it.body; }
+// 收起时显示的那段：原文显示的是正文开头（摘要被 summaryOf 换掉了）时，译文也用正文开头，不用摘要的译文
 function trSummary(it, sum) {
   const s = trState.get(it.key);
-  if (trShown(it)) sum = s.summary || (s.body ? plain(s.body) : sum);
+  if (trShown(it)) {
+    const fromBody = sum !== String(it.summary || '').trim();
+    sum = (fromBody ? (s.body ? plain(s.body) : '') : s.summary || (s.body ? plain(s.body) : '')) || sum;
+  }
   return sum.length > 160 ? sum.slice(0, 160) + '…' : sum;
 }
 function trNote(it) {
@@ -786,7 +797,8 @@ const trObserver = new IntersectionObserver(entries => {
   for (const e of entries) if (e.isIntersecting) {
     trObserver.unobserve(e.target);
     const it = items.get(e.target.dataset.key);
-    if (status.autoTr && it && needsTr(it.title + ' ' + (it.summary || plain(it.body).slice(0, 400)))) queueTr(it.key);
+    // 按实际显示的文字判断（标题 + 收起时那段），不按发行商另填的摘要：中文新闻常配一句英文摘要
+    if (status.autoTr && it && needsTr(it.title + ' ' + summaryOf(it).slice(0, 400))) queueTr(it.key);
   }
 }, { root: document.getElementById('main'), rootMargin: '300px 0px' });
 
