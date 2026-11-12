@@ -163,6 +163,10 @@ public static class Translator
 		Config c = Snapshot();
 		var sw = System.Diagnostics.Stopwatch.StartNew();
 		string text = await RunAsync(c, "把用户的话翻译成" + Target(c) + "，只输出译文。", "The new update is out now! Thanks for playing.", ShouldThink(c, "short"), null).ConfigureAwait(false);
+		if (string.IsNullOrWhiteSpace(text))
+		{
+			throw new InvalidOperationException("接口连通了，但没有返回译文（模型名是否正确？思考模型可能只返回了思考过程）");
+		}
 		return text.Trim() + "（" + (c.AiFormat == "anthropic" ? "Claude" : "OpenAI 兼容") + " · " + Model(c) + " · " + sw.Elapsed.TotalSeconds.ToString("0.0") + " 秒）";
 	}
 
@@ -246,7 +250,8 @@ public static class Translator
 		if (!c.AiStream)
 		{
 			JObject j = JObject.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
-			string text = j["choices"]?[0]?["message"]?.Value<string>("content") ?? "";
+			// 用 SelectToken 取：choices 可能是空数组，直接 [0] 会越界
+			string text = j.SelectToken("choices[0].message.content")?.Value<string>() ?? "";
 			onText?.Invoke(text);
 			return text;
 		}
@@ -278,7 +283,8 @@ public static class Translator
 			{
 				throw new InvalidOperationException("翻译接口出错：" + ErrorText(data));
 			}
-			string delta = j["choices"]?[0]?["delta"]?.Value<string>("content");
+			// 有的接口会发 choices 为空的块（开头的内容审核结果、结尾的用量统计），跳过即可
+			string delta = j.SelectToken("choices[0].delta.content")?.Value<string>();
 			if (!string.IsNullOrEmpty(delta))
 			{
 				sb.Append(delta);
