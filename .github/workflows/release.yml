@@ -63,14 +63,13 @@ jobs:
             $ver = "0.0.0"
           }
           "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          $file = "windows/Properties/AssemblyInfo.cs"
-          $text = Get-Content $file -Raw -Encoding utf8
-          $text = $text -replace 'AssemblyVersion\("[^"]*"\)', "AssemblyVersion(`"$ver.0`")"
-          $text += "`n[assembly: AssemblyFileVersion(`"$ver.0`")]`n[assembly: AssemblyInformationalVersion(`"$ver`")]`n"
-          Set-Content $file $text -Encoding utf8
 
       - name: Build
-        run: dotnet build windows/SteamNewsFeed.csproj -c Release -o out
+        shell: pwsh
+        # 发布时版本号用标签上的；只编译（PR）时不指定，项目自己从 CHANGELOG.md 取
+        run: |
+          $v = if ($env:VERSION -and $env:VERSION -ne "0.0.0") { "-p:AppVersion=$env:VERSION" } else { "" }
+          dotnet build windows/SteamNewsFeed.csproj -c Release -o out $v
 
       - name: Package
         shell: pwsh
