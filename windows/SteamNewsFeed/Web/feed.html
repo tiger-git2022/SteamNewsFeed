@@ -73,11 +73,10 @@ a:hover { text-decoration: underline; }
 .badge.rel { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
 .badge.typ { background: var(--chip); color: var(--fg2); }
 .post.ev { cursor: pointer; }
-/* 生成的发售卡片没有正文可展开：标题、封面点了没反应，只有游戏卡片打开商店页 */
-.post.rel .title, .post.rel .cover { cursor: default; }
-.post.rel .title:hover { color: inherit; }
-.post.ev.open { cursor: default; }
-.post.ev.open .title, .post.ev.open .cover { cursor: pointer; }
+/* 生成的发售卡片：展开显示商店页的完整介绍 */
+.post.rel { cursor: pointer; }
+.post.ev.open, .post.rel.open { cursor: default; }
+.post.ev.open .title, .post.ev.open .cover, .post.rel.open .title, .post.rel.open .cover { cursor: pointer; }
 .post.ev.open.leadimg .cover { display: none; }
 .tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-right: -6px; }
 .icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: transparent; border-color: transparent; color: var(--fg2); }
@@ -88,7 +87,7 @@ a:hover { text-decoration: underline; }
 .menu button:hover { background: var(--hover); }
 .menu .hint { color: var(--fg3); font-size: 12px; padding: 4px 10px 6px; white-space: normal; }
 /* 底栏：左 愿望单，中间 展开/收起，右 点赞评论数 */
-.post.ev .foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.post.ev .foot, .post.rel .foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
 .foot .fl { display: flex; gap: 6px; justify-self: start; }
 .foot .fr { justify-self: end; }
 .foot .fr .stat { margin-left: 0; }
@@ -450,12 +449,13 @@ function releasePost(it) {
   const meta = `${when(it.t)} · 新发售`;
   return `<article class="post rel${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}">
     ${sourceHtml(it, meta)}
-    <h3 class="title">《${esc(a.name)}》 – ${a.type === 0 ? '现已正式发售！' : '现已推出！'}</h3>
-    ${a.capsule ? `<img class="cover" src="${esc(a.capsule)}" loading="lazy" onerror="this.remove()">` : ''}
+    <h3 class="title" data-toggle>《${esc(a.name)}》 – ${a.type === 0 ? '现已正式发售！' : '现已推出！'}</h3>
+    ${a.capsule ? `<img class="cover" src="${esc(a.capsule)}" loading="lazy" data-toggle onerror="this.remove()">` : ''}
     <div class="notice">${notice}</div>
     ${appCard(a)}
     ${a.short ? `<div class="desc">${esc(a.short)}</div>` : ''}
-    ${wishButton(a) ? `<div class="foot">${wishButton(a)}</div>` : ''}
+    <div class="body" hidden></div>
+    <div class="foot"><div class="fl">${wishButton(a)}</div><button class="tg" data-toggle><span>展开完整介绍</span><svg viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button><div class="fr"></div></div>
   </article>`;
 }
 // 摘要：发行商单独填的摘要常常只有一句英文（比如中文新闻配「XX OUT NOW from XX!」），
@@ -864,16 +864,26 @@ function leadsWithImage(body) {
   }
   return false;
 }
+// 新发售卡片：展开时才去读商店页的「关于这款游戏」
+function loadDesc(post, it) {
+  const body = post.querySelector('.body');
+  body.innerHTML = '<span style="color:var(--fg3)"><span class="spin"></span>正在读取商店页的介绍…</span>';
+  host.call('appdesc', { appid: it.release.appid })
+    .then(d => { body.innerHTML = bb(d) || '<span style="color:var(--fg3)">（商店页没有填写介绍）</span>'; })
+    .catch(e => { body.innerHTML = `<span style="color:var(--fg3)">读取失败：${esc(errText(e))}</span> · <a data-redesc>重试</a>`; });
+}
 function toggleBody(post) {
-  const it = items.get(post.dataset.key); if (!it || it.kind === 'release') return;
-  const body = post.querySelector('.body'), btn = post.querySelector('button.tg span');
+  const it = items.get(post.dataset.key); if (!it) return;
+  const rel = it.kind === 'release';
+  const body = post.querySelector('.body'), btn = post.querySelector('button.tg span'), short = post.querySelector(rel ? '.desc' : '.summary');
+  if (!body) return;
   if (body.hidden) {
-    if (!body.innerHTML) renderBody(post, it);
-    body.hidden = false; post.querySelector('.summary').hidden = true; post.classList.add('open');
+    if (!body.innerHTML) { if (rel) loadDesc(post, it); else renderBody(post, it); }
+    body.hidden = false; if (short) short.hidden = true; post.classList.add('open');
     if (btn) btn.textContent = '收起';
   } else {
-    body.hidden = true; post.querySelector('.summary').hidden = false; post.classList.remove('open');
-    if (btn) btn.textContent = '展开全文';
+    body.hidden = true; if (short) short.hidden = false; post.classList.remove('open');
+    if (btn) btn.textContent = rel ? '展开完整介绍' : '展开全文';
     if (post.getBoundingClientRect().top < $('#main').getBoundingClientRect().top) post.scrollIntoView({ block: 'start' });
   }
 }
@@ -998,12 +1008,14 @@ document.addEventListener('click', async e => {
   if (ctr) { e.preventDefault(); const p = ctr.closest('.post'); if (p) translateComments(p.dataset.key, false); return; }
   const cmore = t.closest('[data-cmore]');
   if (cmore) { e.preventDefault(); const p = cmore.closest('.post'); if (p) loadComments(p.dataset.key, true); return; }
+  const redesc = t.closest('[data-redesc]');
+  if (redesc) { e.preventDefault(); const p = redesc.closest('.post'), x = p && items.get(p.dataset.key); if (x) loadDesc(p, x); return; }
   const open = t.closest('[data-open]');
   if (open) { e.preventDefault(); host.call('open', { url: open.dataset.open }); return; }
   const a = t.closest('a[href]');
   if (a) { e.preventDefault(); const u = safeUrl(a.getAttribute('href')); if (u) host.call('open', { url: u }); return; }
   // 点文章本身：展开 / 收起（展开后点正文、评论不收起，方便看和选字）
-  const post = t.closest('.post.ev');
+  const post = t.closest('.post.ev, .post.rel');
   if (!post || t.closest('button, video, .appcard, .menu, .cmts, summary, details')) { if (!t.closest('[data-toggle]') || !post) return; }
   if (String(window.getSelection() || '').trim()) return;
   if (post.classList.contains('open') && !t.closest('[data-toggle]') && t.closest('.body, .foot')) return;
