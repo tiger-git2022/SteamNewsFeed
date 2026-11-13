@@ -78,6 +78,7 @@ a:hover { text-decoration: underline; }
 .post.rel .title:hover { color: inherit; }
 .post.ev.open { cursor: default; }
 .post.ev.open .title, .post.ev.open .cover { cursor: pointer; }
+.post.ev.open.leadimg .cover { display: none; }
 .tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-right: -6px; }
 .icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: transparent; border-color: transparent; color: var(--fg2); }
 .icon:hover { background: var(--hover); color: var(--fg); }
@@ -757,7 +758,7 @@ function paintTr(key) {
   const body = post.querySelector('.body');
   if (body && !body.hidden) {
     cancelAnimationFrame(paintTr.raf);
-    paintTr.raf = requestAnimationFrame(() => { body.innerHTML = bb(trBody(it)) || '<span style="color:var(--fg3)">（没有正文）</span>'; });
+    paintTr.raf = requestAnimationFrame(() => renderBody(post, it));
   } else if (body) body.innerHTML = '';
 }
 function queueTr(key, force) {
@@ -843,11 +844,31 @@ async function doBlock(post, i) {
   toast(`已屏蔽${b.kind === 'app' ? '游戏《' + b.name + '》' : '账号「' + b.name + '」'}，可以在设置里取消`, 3500);
 }
 
+// 正文：封面图常常就是正文开头那张图，展开后会上下各显示一次。
+// 同一个文件：正文里那张不再显示；文件不同但正文一开头就是图（多半是同一张图另传了一份）：展开时藏起封面
+function renderBody(post, it) {
+  const body = post.querySelector('.body');
+  body.innerHTML = bb(trBody(it)) || '<span style="color:var(--fg3)">（没有正文）</span>';
+  const cover = post.querySelector('img.cover'), file = u => String(u || '').split(/[?#]/)[0].split('/').pop().toLowerCase();
+  const name = cover && file(cover.getAttribute('src'));
+  const dup = name && [...body.querySelectorAll('img')].find(x => file(x.getAttribute('src')) === name);
+  if (dup) dup.remove();
+  post.classList.toggle('leadimg', !dup && leadsWithImage(body));
+}
+function leadsWithImage(body) {
+  const w = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  for (let n; (n = w.nextNode());) {
+    if (n.nodeType === 3) { if (n.textContent.trim()) return false; }
+    else if (n.tagName === 'IMG') return !n.closest('a.yt');
+    else if (n.tagName === 'VIDEO' || n.tagName === 'SUMMARY') return false;
+  }
+  return false;
+}
 function toggleBody(post) {
   const it = items.get(post.dataset.key); if (!it || it.kind === 'release') return;
   const body = post.querySelector('.body'), btn = post.querySelector('button.tg span');
   if (body.hidden) {
-    if (!body.innerHTML) body.innerHTML = bb(trBody(it)) || '<span style="color:var(--fg3)">（没有正文）</span>';
+    if (!body.innerHTML) renderBody(post, it);
     body.hidden = false; post.querySelector('.summary').hidden = true; post.classList.add('open');
     if (btn) btn.textContent = '收起';
   } else {
