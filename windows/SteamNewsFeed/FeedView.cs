@@ -358,6 +358,8 @@ public sealed class FeedView : Grid
 			}
 			return await Task.Run(() => Translator.TranslateTextsAsync(texts));
 		}
+		case "appdesc":
+			return await Task.Run(() => Feed.AppDescAsync(a.Value<int?>("appid") ?? 0));
 		case "comments":
 			return await Task.Run(() => Feed.CommentsAsync(a.Value<string>("gid"), Math.Max(0, a.Value<int?>("start") ?? 0), Math.Max(1, Math.Min(50, a.Value<int?>("count") ?? 10))));
 		case "block":

@@ -617,6 +617,47 @@ public static class Feed
 
 	// ---- 游戏信息 ----
 
+	private static readonly Dictionary<int, string> _desc = new Dictionary<int, string>();
+
+	/// <summary>商店页「关于这款游戏」（BBCode），展开新发售卡片时才读。图片地址里的 {STEAM_APP_IMAGE} 换成真实地址。</summary>
+	public static async Task<JToken> AppDescAsync(int appid)
+	{
+		if (appid <= 0)
+		{
+			throw new InvalidOperationException("没有这个游戏");
+		}
+		lock (L)
+		{
+			if (_desc.TryGetValue(appid, out string hit))
+			{
+				return hit;
+			}
+		}
+		string country;
+		lock (Store.Lock)
+		{
+			country = Store.St.Country != "" ? Store.St.Country : "US";
+		}
+		var input = new JObject
+		{
+			["ids"] = new JArray(new JObject { ["appid"] = appid }),
+			["context"] = new JObject { ["language"] = "schinese", ["country_code"] = country, ["steam_realm"] = 1 },
+			["data_request"] = new JObject { ["include_full_description"] = true },
+		};
+		JObject j = await Steam.GetPublicJsonAsync(Steam.Api + "/IStoreBrowseService/GetItems/v1?input_json=" + Uri.EscapeDataString(input.ToString(Formatting.None))).ConfigureAwait(false);
+		JToken it = (j["response"]?["store_items"] as JArray)?.FirstOrDefault();
+		if (it == null || it.Value<int?>("success") != 1)
+		{
+			throw new InvalidOperationException("商店页没有返回这个游戏的信息");
+		}
+		string desc = (it.Value<string>("full_description_bbcode") ?? "").Replace("{STEAM_APP_IMAGE}", Steam.AssetCdn + "steam/apps/" + appid);
+		lock (L)
+		{
+			_desc[appid] = desc;
+		}
+		return desc;
+	}
+
 	/// <summary>用公开的 GetItems 一次取多个游戏的名字、图片、标签、发售时间、价格、发行商。</summary>
 	private static async Task FetchItemsAsync(IEnumerable<int> ids)
 	{
