@@ -712,6 +712,27 @@ public static class Feed
 		}
 	}
 
+	/// <summary>正文里链接到的游戏（显示成游戏卡片）：没读过的先用 GetItems 读，再给出卡片要的信息，appid → 信息。</summary>
+	public static async Task<JToken> AppsAsync(IEnumerable<int> ids)
+	{
+		var list = ids.Where(a => a > 0).Distinct().Take(60).ToList();
+		await EnsureTagsAsync().ConfigureAwait(false);
+		await EnsureAppsAsync(list, 6 * 3600).ConfigureAwait(false);
+		var o = new JObject();
+		lock (L)
+		{
+			foreach (int a in list)
+			{
+				JObject j = AppJson(a);
+				if (j != null)
+				{
+					o[a.ToString(CultureInfo.InvariantCulture)] = j;
+				}
+			}
+		}
+		return o;
+	}
+
 	private static async Task EnsureTagsAsync()
 	{
 		if (_tags != null)
