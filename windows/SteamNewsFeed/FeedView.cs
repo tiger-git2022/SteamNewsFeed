@@ -358,6 +358,8 @@ public sealed class FeedView : Grid
 			}
 			return await Task.Run(() => Translator.TranslateTextsAsync(texts));
 		}
+		case "apps":
+			return await Task.Run(() => Feed.AppsAsync((a["ids"] as JArray ?? new JArray()).Select(x => x.Value<int>())));
 		case "appdesc":
 			return await Task.Run(() => Feed.AppDescAsync(a.Value<int?>("appid") ?? 0));
 		case "comments":

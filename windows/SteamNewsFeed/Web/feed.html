@@ -78,6 +78,9 @@ a:hover { text-decoration: underline; }
 .post.ev.open, .post.rel.open { cursor: default; }
 .post.ev.open .title, .post.ev.open .cover, .post.rel.open .title, .post.rel.open .cover { cursor: pointer; }
 .post.ev.open.leadimg .cover { display: none; }
+/* 正文很短的新闻直接显示全文，没有展开 / 收起 */
+.post.ev.full, .post.ev.full .title, .post.ev.full .cover { cursor: default; }
+.post.ev.full .title:hover { color: inherit; }
 .tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-right: -6px; }
 .icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: transparent; border-color: transparent; color: var(--fg2); }
 .icon:hover { background: var(--hover); color: var(--fg); }
@@ -153,16 +156,26 @@ button.wish.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45
 .appcard:hover { background: var(--cardhover); text-decoration: none; }
 .appcard .cap { width: 46%; max-width: 330px; flex-shrink: 0; object-fit: cover; background: var(--thumb); }
 .appcard .info { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.appcard .aname { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.appcard .aname, .gcard .aname { font-weight: 600; display: flex; gap: 6px; align-items: center; }
 .appcard .ashort { color: var(--fg2); font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .tags span { background: var(--chip); color: var(--fg2); font-size: 11px; padding: 1px 6px; border-radius: 3px; }
-.appcard .adate { color: var(--fg3); font-size: 12px; }
+.appcard .adate, .gcard .adate { color: var(--fg3); font-size: 12px; }
 /* 评测：颜色和 Steam 一样（好评蓝、褒贬不一黄、差评橙） */
-.appcard .rev { font-size: 12.5px; color: var(--fg2); }
-.appcard .rev b { font-weight: 600; margin-right: 6px; }
+.appcard .rev, .gcard .rev { font-size: 12.5px; color: var(--fg2); }
+.appcard .rev b, .gcard .rev b { font-weight: 600; margin-right: 6px; }
 .rev.pos b { color: #66c0f4; } .rev.mix b { color: #b9a074; } .rev.neg b { color: #c35c2c; } .rev.none b { color: var(--fg3); }
 :root.light .rev.pos b { color: #1a7bc4; } :root.light .rev.mix b { color: #8a6d1f; } :root.light .rev.neg b { color: #b0441a; }
+/* 正文里链接到的游戏：换成游戏卡片（横幅图、名字、评测、愿望单、价格），点了打开商店页 */
+steam-app { display: block; margin: 10px 0; max-width: 640px; }
+steam-app:not([data-done]) { height: 140px; border-radius: 6px; background: var(--card2); border: 1px solid var(--line); }
+.gcard { display: flex; border-radius: 6px; overflow: hidden; background: var(--card2); border: 1px solid var(--line); cursor: pointer; color: var(--fg); }
+.gcard:hover { background: var(--cardhover); }
+.body .gcard .gimg { width: 46%; max-width: 300px; flex-shrink: 0; aspect-ratio: 460 / 215; object-fit: cover; margin: 0; border-radius: 0; background: var(--thumb); }
+.gcard .ginfo { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.gcard .grow { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.gcard .grow button { padding: 3px 10px; font-size: 13px; }
+.gcard .price { margin-top: 0; }
 .price { margin-top: auto; align-self: flex-end; display: flex; align-items: stretch; border-radius: 3px; overflow: hidden; font-size: 13px; }
 .price > * { display: flex; align-items: center; padding: 2px 8px; }
 .price .newtag { background: #4a7fd0; color: #fff; font-size: 12px; }
@@ -326,19 +339,33 @@ function shortDay(t) { const d = new Date(t * 1000); return (d.getMonth() + 1) +
 // ---------- Steam 新闻正文（BBCode → HTML） ----------
 function bb(src) {
   src = String(src || '').replace(/\{STEAM_CLAN_IMAGE\}/g, CLAN).replace(/\r\n?/g, '\n');
-  const slots = [];
+  const slots = [], games = new Set();
   const put = html => '\u0001' + (slots.push(html) - 1) + '\u0001';
   const attr = (s, k) => { const m = new RegExp(k + '\\s*=\\s*("([^"]*)"|\'([^\']*)\'|([^\\s\\]]+))', 'i').exec(s || ''); return m ? (m[2] ?? m[3] ?? m[4] ?? '') : ''; };
+  // 指向商店游戏页的链接换成游戏卡片（和手机版一样），一篇里同一个游戏只放一张；不是游戏页的返回空（去掉）
+  const game = u => { const id = storeAppId(u); if (!id || games.has(id)) return ''; games.add(id); return put(`<steam-app data-app="${id}" data-open="${esc(u)}"></steam-app>`); };
+  // 写出来的网址：游戏页换成卡片，别的去掉（只是一串网址，没有意义）。网址只认 ASCII 字符，后面紧跟的中文标点不算
+  const txt = s => esc(s.replace(/https?:\/\/[!#-;=?-Z^-~]+/gi, m => { const u = m.replace(/[.,)。，）]+$/, ''); return game(u) + m.slice(u.length); })).replace(/\n/g, '<br>');
+  // [url]网址[/url]、[url=网址]网址[/url]：显示出来就是一串网址，游戏页换成卡片，别的去掉；
+  // [url=游戏页]一段文字[/url]：整段换成这个游戏的卡片；别的超链接照常（带图的不动）
+  src = src.replace(/\[url(=[^\]]*)?\]([\s\S]*?)\[\/url\]/gi, (all, a, inner) => {
+    if (/\[img/i.test(inner)) return all;
+    if (!a) { const u = safeUrl(inner); return u ? game(u) : all; }
+    const u = safeUrl(a.slice(1).trim().replace(/^["']|["']$/g, '')); if (!u) return all;
+    const text = inner.replace(/\[[^\]]*\]/g, '').trim();
+    if (storeAppId(u)) return game(u);
+    return !text || safeUrl(text) ? '' : all;
+  });
   src = src.replace(/\[img([^\]]*)\]([\s\S]*?)\[\/img\]/gi, (_, a, inner) => { const u = safeUrl(attr(a, 'src') || inner.trim()); return u ? put(`<img src="${esc(u)}" loading="lazy" onerror="this.remove()">`) : ''; });
   src = src.replace(/\[previewyoutube=["']?([\w-]+)[^\]]*\]\s*\[\/previewyoutube\]/gi, (_, id) => put(`<a class="yt" href="https://www.youtube.com/watch?v=${esc(id)}"><img src="https://i.ytimg.com/vi/${esc(id)}/hqdefault.jpg" loading="lazy" onerror="this.style.display='none'"><span>▶ 在 YouTube 观看</span></a>`));
   src = src.replace(/\[video([^\]]*)\]\s*\[\/video\]/gi, (_, a) => { const webm = safeUrl(attr(a, 'webm')), mp4 = safeUrl(attr(a, 'mp4')), poster = safeUrl(attr(a, 'poster')); return (webm || mp4) ? put(`<video controls muted preload="none" ${poster ? `poster="${esc(poster)}"` : ''}>${webm ? `<source src="${esc(webm)}" type="video/webm">` : ''}${mp4 ? `<source src="${esc(mp4)}" type="video/mp4">` : ''}</video>`) : ''; });
-  src = src.replace(/\[dynamiclink([^\]]*)\]\s*\[\/dynamiclink\]/gi, (_, a) => { const u = safeUrl(attr(a, 'href')); return u ? put(`<a href="${esc(u)}">${esc(u)}</a>`) : ''; });
-  src = src.replace(/\[url\]([^\[]+)\[\/url\]/gi, (_, u) => { const s = safeUrl(u); return s ? put(`<a href="${esc(s)}">${esc(s)}</a>`) : esc(u); });
+  // 商店卡片：游戏的换成游戏卡片，别的（只会显示成一串网址）去掉
+  src = src.replace(/\[dynamiclink([^\]]*)\]\s*\[\/dynamiclink\]/gi, (_, a) => game(safeUrl(attr(a, 'href'))));
   const tagRe = /\[(\/?)([a-z0-9*]+)((?:=|\s)[^\]]*)?\]/gi;
   const simple = { b: 'strong', i: 'em', u: 'u', strike: 's', h1: 'h3', h2: 'h4', h3: 'h5', p: 'p', quote: 'blockquote', code: 'code', list: 'ul', olist: 'ol', table: 'table', tr: 'tr', td: 'td', th: 'th', carousel: 'div' };
   let out = '', last = 0, m;
   while ((m = tagRe.exec(src))) {
-    out += esc(src.slice(last, m.index)).replace(/\n/g, '<br>');
+    out += txt(src.slice(last, m.index));
     last = tagRe.lastIndex;
     const close = m[1] === '/', name = m[2].toLowerCase(), arg = (m[3] || '').replace(/^=/, '').trim();
     if (simple[name]) out += close ? `</${simple[name]}>` : `<${simple[name]}>`;
@@ -350,12 +377,20 @@ function bb(src) {
     else if (name === 'noparse' || name === 'list' || name === 'olist') out += '';
     else if (!/^(img|video|previewyoutube|dynamiclink|h\d|pullquote|c|color|size|font|align|center|left|right|i|b|u)$/.test(name) && !simple[name]) out += esc(m[0]);   // 不认识的：原样显示（像 [DLC] 这种正文里的方括号）
   }
-  out += esc(src.slice(last)).replace(/\n/g, '<br>');
+  out += txt(src.slice(last));
   out = out.replace(/\u0001(\d+)\u0001/g, (_, i) => slots[+i]);
-  const block = '(?:p|ul|ol|li|h3|h4|h5|blockquote|table|tr|td|th|hr|div|details|summary|img|video|a class="yt")';
-  out = out.replace(new RegExp('(<\\/?' + block + '[^>]*>)\\s*(?:<br>\\s*)+', 'g'), '$1').replace(new RegExp('(?:<br>\\s*)+(<\\/?' + block + '[^>]*>)', 'g'), '$1');
-  return out;
+  const block = '(?:p|ul|ol|li|h3|h4|h5|blockquote|table|tr|td|th|hr|div|details|summary|img|video|steam-app|a class="yt")';
+  const tidy = h => h.replace(new RegExp('(<\\/?' + block + '[^>]*>)\\s*(?:<br>\\s*)+', 'g'), '$1').replace(new RegExp('(?:<br>\\s*)+(<\\/?' + block + '[^>]*>)', 'g'), '$1');
+  out = tidy(out);
+  // 卡片后面紧跟的标点（原文「…作品：链接！」）挪到卡片前面那段文字的末尾，免得卡片下面单独剩一个「！」；前面没有文字可接就去掉
+  out = out.replace(/(\s*)((?:<steam-app[^>]*><\/steam-app>\s*)+)([!！?？.。,，、;；:：…~～)）\]】」』》〉”’]+)/g, (all, ws, cards, punct, off, whole) => {
+    const before = whole.slice(0, off);
+    return /[^>\s]$/.test(before) || /<\/(strong|em|u|s|a|code|span)>$/.test(before) ? punct + cards : ws + cards;
+  });
+  return tidy(out);   // 挪走标点后，卡片后面可能又剩下换行
 }
+const STORE_APP = /^https?:\/\/store\.steampowered\.com\/app\/(\d+)/i;
+function storeAppId(u) { const m = STORE_APP.exec(String(u || '').trim()); return m ? +m[1] : 0; }
 function plain(src) {
   return String(src || '').replace(/\{STEAM_CLAN_IMAGE\}[^\s\[]*/g, '').replace(/\[img[\s\S]*?\[\/img\]/gi, '').replace(/\[previewyoutube[\s\S]*?\[\/previewyoutube\]/gi, '').replace(/\[[^\]]{1,80}\]/g, ' ').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
 }
@@ -397,6 +432,41 @@ function appCard(app) {
       ${priceHtml(app)}
     </div></a>`;
 }
+// 正文里的游戏卡片：卡片出现时读游戏信息，150 ms 内要的合成一批
+const appInfo = new Map(), appQueue = new Set();
+let appTimer = 0;
+function gameCard(a) {
+  return `<div class="gcard" data-open="${esc(a.url)}">
+    <img class="gimg" src="${esc(a.header || a.capsule)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="ginfo"><div class="aname">${esc(a.name)}${a.type !== 0 ? `<span class="badge typ">${esc(a.typeName)}</span>` : ''}</div>${a.comingSoon && a.releaseTs ? `<div class="adate">${day(a.releaseTs)} 发售</div>` : ""}${reviewHtml(a)}<div class="grow">${wishButton(a)}${priceHtml(a)}</div></div></div>`;
+}
+function paintApp(el) {
+  const id = +el.dataset.app, a = appInfo.get(id);
+  el.dataset.done = 1;
+  el.innerHTML = a ? gameCard(a) : `<a data-open="${esc(el.dataset.open)}">在 Steam 商店打开（${id}）</a>`;
+}
+function fillApps(root) {
+  for (const el of root.querySelectorAll('steam-app:not([data-done])')) {
+    if (appInfo.has(+el.dataset.app)) paintApp(el); else appQueue.add(+el.dataset.app);
+  }
+  if (appQueue.size && !appTimer) appTimer = setTimeout(fetchApps, 150);
+}
+async function fetchApps() {
+  const ids = [...appQueue]; appQueue.clear();
+  try { const r = await host.call('apps', { ids }); for (const [k, a] of Object.entries(r || {})) appInfo.set(+k, a); }
+  catch (e) { log('apps: ' + errText(e)); }
+  appTimer = 0;
+  for (const id of ids) {
+    if (!appInfo.has(id)) appInfo.set(id, null);
+    for (const el of document.querySelectorAll(`steam-app[data-app="${id}"]:not([data-done])`)) paintApp(el);
+  }
+  if (appQueue.size) appTimer = setTimeout(fetchApps, 150);
+}
+// 正文很短（字不多、最多一张图或一个视频）：展开和收起差不多，直接显示全文
+function isShortBody(it) {
+  const b = String(it.body || ''), len = plain(b).length;
+  return len > 0 && len <= 300 && (b.match(/\[(img|video|previewyoutube)\b/gi) || []).length <= 1;
+}
 function isNewItem(it) { return current && current.filter === 'all' && S.readUpTo && it.t > S.readUpTo && !S.seen[it.key]; }
 const STEAM_SVG = '<svg viewBox="0 0 24 24"><path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/></svg>';
 function sourceHtml(it, extra) {
@@ -428,16 +498,16 @@ function eventPost(it) {
   const img = it.image || firstImage(it.body) || (it.release && it.release.capsule) || '';
   const sum = summaryOf(it);
   const meta = `${when(it.postedT || it.t)} · ${esc(it.type)}${it.fromGamePage ? ' · 来自游戏页面' : ''}${alsoHtml(it)}`;
-  const wish = wishButton(it.release || it.app), stats = statsHtml(it);
-  return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
+  const wish = wishButton(it.release || it.app), stats = statsHtml(it), full = isShortBody(it);
+  return `<article class="post ev${isNewItem(it) ? ' fresh' : ' seen'}${full ? ' open full' : ''}" data-key="${esc(it.key)}"${it.comments > 0 ? ' data-cmt="1"' : ''}>
     ${sourceHtml(it, meta)}
     <h3 class="title" data-toggle>${esc(trTitle(it))}</h3>
     <div class="trnote${(trState.get(it.key) || {}).busy ? ' busy' : ''}"${trNote(it) ? '' : ' hidden'}>${trNote(it)}</div>
     ${img ? `<img class="cover" src="${esc(img)}" loading="lazy" data-toggle onerror="this.remove()">` : ''}
-    <div class="summary">${esc(trSummary(it, sum))}</div>
-    <div class="body" hidden></div>
+    <div class="summary"${full ? ' hidden' : ''}>${esc(trSummary(it, sum))}</div>
+    <div class="body"${full ? '' : ' hidden'}></div>
     ${it.release ? appCard(it.release) : ''}
-    <div class="foot"><div class="fl">${wish}</div><button class="tg" data-toggle><span>展开全文</span><svg viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button><div class="fr">${stats}</div></div>
+    <div class="foot"><div class="fl">${wish}</div>${full ? '<span></span>' : '<button class="tg" data-toggle><span>展开全文</span><svg viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg></button>'}<div class="fr">${stats}</div></div>
     ${it.comments > 0 ? `<div class="cmts">${commentsInner(it)}</div>` : ''}
   </article>`;
 }
@@ -854,6 +924,7 @@ function renderBody(post, it) {
   const dup = name && [...body.querySelectorAll('img')].find(x => file(x.getAttribute('src')) === name);
   if (dup) dup.remove();
   post.classList.toggle('leadimg', !dup && leadsWithImage(body));
+  fillApps(body);
 }
 function leadsWithImage(body) {
   const w = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
@@ -869,11 +940,11 @@ function loadDesc(post, it) {
   const body = post.querySelector('.body');
   body.innerHTML = '<span style="color:var(--fg3)"><span class="spin"></span>正在读取商店页的介绍…</span>';
   host.call('appdesc', { appid: it.release.appid })
-    .then(d => { body.innerHTML = bb(d) || '<span style="color:var(--fg3)">（商店页没有填写介绍）</span>'; })
+    .then(d => { body.innerHTML = bb(d) || '<span style="color:var(--fg3)">（商店页没有填写介绍）</span>'; fillApps(body); })
     .catch(e => { body.innerHTML = `<span style="color:var(--fg3)">读取失败：${esc(errText(e))}</span> · <a data-redesc>重试</a>`; });
 }
 function toggleBody(post) {
-  const it = items.get(post.dataset.key); if (!it) return;
+  const it = items.get(post.dataset.key); if (!it || post.classList.contains('full')) return;
   const rel = it.kind === 'release';
   const body = post.querySelector('.body'), btn = post.querySelector('button.tg span'), short = post.querySelector(rel ? '.desc' : '.summary');
   if (!body) return;
@@ -889,6 +960,7 @@ function toggleBody(post) {
 }
 
 function observeAll() {
+  for (const el of document.querySelectorAll('.post.full')) { const b = el.querySelector('.body'), it = items.get(el.dataset.key); if (b && !b.innerHTML && it) renderBody(el, it); }
   if (current && current.filter === 'all') for (const el of document.querySelectorAll('.post.fresh:not([data-obs])')) { el.dataset.obs = 1; seenObserver.observe(el); }
   for (const el of document.querySelectorAll('.post[data-cmt]:not([data-cobs])')) { el.dataset.cobs = 1; if (!cmtCache.has(el.dataset.key)) cmtObserver.observe(el); }
   if (status.autoTr) for (const el of document.querySelectorAll('.post.ev:not([data-tobs])')) { el.dataset.tobs = 1; if (!trState.has(el.dataset.key)) trObserver.observe(el); }
@@ -987,6 +1059,7 @@ document.addEventListener('click', async e => {
     try {
       await host.call('wish', { appid, on });
       for (const it of items.values()) { for (const a of [it.release, it.app]) if (a && a.appid === appid) a.wish = on; }
+      if (appInfo.get(appid)) appInfo.get(appid).wish = on;
       for (const b of document.querySelectorAll(`[data-wish="${appid}"]`)) { b.classList.toggle('on', on); b.textContent = on ? '✓ 已在愿望单' : '＋ 愿望单'; }
       toast(on ? '已加入愿望单' : '已移出愿望单');
     } catch (err) { toast(errText(err), 4000); }
@@ -1016,7 +1089,7 @@ document.addEventListener('click', async e => {
   if (a) { e.preventDefault(); const u = safeUrl(a.getAttribute('href')); if (u) host.call('open', { url: u }); return; }
   // 点文章本身：展开 / 收起（展开后点正文、评论不收起，方便看和选字）
   const post = t.closest('.post.ev, .post.rel');
-  if (!post || t.closest('button, video, .appcard, .menu, .cmts, summary, details')) { if (!t.closest('[data-toggle]') || !post) return; }
+  if (!post || t.closest('button, video, .appcard, steam-app, .menu, .cmts, summary, details')) { if (!t.closest('[data-toggle]') || !post) return; }
   if (String(window.getSelection() || '').trim()) return;
   if (post.classList.contains('open') && !t.closest('[data-toggle]') && t.closest('.body, .foot')) return;
   toggleBody(post);
